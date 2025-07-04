@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Health Assistant</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>🩺 AI Diagnosis Assistant</h1>
+    <form method="POST" action="/">
+      <input type="text" name="name" placeholder="Full Name" required>
+      <input type="number" name="age" placeholder="Age" required>
+      <select name="gender">
+        <option>Male</option>
+        <option>Female</option>
+        <option>Other</option>
+      </select>
+      <input type="text" name="location" placeholder="Location" required>
+      <textarea name="symptoms" placeholder="Enter symptoms separated by commas" required></textarea>
+      <input type="number" name="days" placeholder="How many days sick?" required>
+      <button type="submit">Diagnose Me</button>
+    </form>
+
+    {% if result %}
+      <div class="result">
+        <h2>Result for {{ result.name }}</h2>
+        <p><strong>Disease:</strong> {{ result.disease }}</p>
+        <p><strong>Description:</strong> {{ result.description }}</p>
+        <p><strong>Severity:</strong> {{ result.severity }}</p>
+        <h3>Precautions:</h3>
+        <ul>
+          {% for precaution in result.precautions %}
+            <li>{{ precaution }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+  </div>
+</body>
+</html>
