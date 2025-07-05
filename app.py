@@ -65,6 +65,79 @@ def result():
             "description": info.get("description", "No description available."),
             "precautions": info.get("precautions", [])
         })
+from flask import send_file
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+import io
+
+@app.route("/download")
+def download():
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    y = height - 50
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(50, y, "🧾 AI Health Assistant Diagnosis Report")
+    y -= 30
+
+    c.setFont("Helvetica", 12)
+    c.drawString(50, y, f"👤 Name: {patient_data['name']}")
+    y -= 20
+    c.drawString(50, y, f"🎂 Age: {patient_data['age']} | ⚧ Gender: {patient_data['gender']}")
+    y -= 20
+    c.drawString(50, y, f"📍 Location: {patient_data['location']}")
+    y -= 20
+    c.drawString(50, y, f"💬 Symptoms: {patient_data['symptoms']}")
+    y -= 30
+
+    # Severity
+    days = patient_data['days']
+    if days <= 3:
+        severity = "Moderate – Rest and monitor closely. Visit a doctor if worsened."
+    elif days <= 6:
+        severity = "Mild to Severe – Consider medical consultation soon."
+    else:
+        severity = "Severe – Visit the nearest hospital immediately."
+
+    c.drawString(50, y, f"⏳ Duration of illness: {days} days")
+    y -= 20
+    c.drawString(50, y, f"⚠️ Severity: {severity}")
+    y -= 30
+
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "Predicted Diseases:")
+    y -= 20
+
+    # Include top 5 diseases
+    probs = model.predict_proba(np.array([[1 if s in patient_data['symptoms'].lower() else 0 for s in symptom_list]]))[0]
+    top_indices = probs.argsort()[-5:][::-1]
+
+    for idx in top_indices:
+        disease = label_encoder.inverse_transform([idx])[0]
+        info = disease_info.get(disease, {})
+        confidence = round(probs[idx] * 100, 2)
+        y -= 15
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(60, y, f"{disease.title()} ({confidence}%)")
+        y -= 15
+        c.setFont("Helvetica", 10)
+        c.drawString(60, y, "Description: " + info.get("description", "N/A"))
+        y -= 15
+        c.drawString(60, y, "Precautions:")
+        for p in info.get("precautions", []):
+            y -= 12
+            c.drawString(75, y, f"- {p}")
+        y -= 20
+        if y < 100:
+            c.showPage()
+            y = height - 50
+
+    c.drawString(50, y, "📄 This is a computer-generated health suggestion. Please consult a certified physician.")
+    c.save()
+
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True, download_name="diagnosis_report.pdf", mimetype="application/pdf")
 
     # Severity check based on days
     days = patient_data["days"]
