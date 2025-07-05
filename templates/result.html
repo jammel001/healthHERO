@@ -1,42 +1,40 @@
-<!-- templates/result.html -->
+<!-- result.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Diagnosis Result</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta charset="UTF-8">
+    <title>Diagnosis Result</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <div class="chat-container">
-    <div class="chat-box">
-      <p>🔎 Based on your symptoms, you may have one of the following conditions:</p>
-      {% for item in results %}
-        <div class="disease-block">
-          <p>🦠 <strong>Disease:</strong> {{ item.name }} ({{ item.confidence }}%)</p>
-          <p>📄 <strong>Description:</strong> {{ item.description }}</p>
-          <p>🛡️ <strong>Precautions:</strong></p>
-          <ul>
-            {% for p in item.precautions %}
-              <li>- {{ p }}</li>
+    <div class="container">
+        <div class="chat-box">
+            <h2>🔎 Based on your symptoms, you may have one of the following conditions:</h2>
+
+            {% for res in results %}
+                <div class="result">
+                    <h3>🦠 {{ res.name }} ({{ res.confidence }}%)</h3>
+                    <p><strong>📄 Description:</strong> {{ res.description }}</p>
+                    <p><strong>🛡️ Precautions:</strong></p>
+                    <ul>
+                        {% for p in res.precautions %}
+                            <li>{{ p }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
             {% endfor %}
-          </ul>
+
+            <p><strong>⏳ Severity level:</strong> {{ severity }}</p>
+
+            <p>📍 Dear {{ patient.name }}, based on the symptoms you've shared and your duration of illness, we encourage you to visit a hospital or clinic in {{ patient.location }} for proper medical consultation.</p>
+
+            <p>💡 Always prioritize your health. Stay hydrated, eat well, and avoid self-medication.</p>
+
+            <div class="actions">
+                <a href="/download" class="btn">⬇️ Download Prescription</a>
+                <a href="/restart" class="btn">🔁 Make Another Diagnosis</a>
+            </div>
         </div>
-      {% endfor %}
-
-      <p>⚠️ <strong>Severity level:</strong> {{ severity }}</p>
-
-      <p>📍 Dear {{ patient.name }}, based on the symptoms you've shared and your duration of illness,</p>
-      <p>we encourage you to visit a hospital or clinic in <strong>{{ patient.location }}</strong> for proper medical consultation.</p>
-
-      <p>💡 Always prioritize your health. Stay hydrated, eat well, and avoid self-medication.</p>
-
-      <form action="{{ url_for('restart') }}">
-        <button type="submit">🔁 Make another diagnosis</button>
-      </form>
     </div>
-  </div>
 </body>
 </html>
-<form action="{{ url_for('download') }}">
-  <button type="submit">📥 Download Your Prescription (PDF)</button>
-</form>
