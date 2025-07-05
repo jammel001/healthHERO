@@ -1,91 +1,97 @@
-from flask import Flask, render_template, request, jsonify
-import pandas as pd
+from flask import Flask, render_template, request, redirect, url_for
 import joblib
-import re
+import json
+import numpy as np
 
-# Initialize Flask app
 app = Flask(__name__)
 
-# Load model and resources
-clf = joblib.load("disease_model.pkl")
-le = joblib.load("label_encoder.pkl")
-merged_df = pd.read_csv("merged_data.csv")
+# Load trained model and data
+model = joblib.load("disease_model.pkl")
+label_encoder = joblib.load("label_encoder.pkl")
+with open("symptom_list.json") as f:
+    symptom_list = json.load(f)
+with open("disease_info.json") as f:
+    disease_info = json.load(f)
 
-# Prepare list of all possible symptoms
-symptom_cols = [col for col in merged_df.columns if col.lower().startswith("symptom_")]
-all_symptoms = sorted(set(merged_df[symptom_cols].fillna('').values.ravel()) - {''})
+# Temporary in-memory storage for conversation steps
+patient_data = {}
 
-@app.route("/")
+@app.route("/", methods=["GET", "POST"])
 def index():
-    return render_template("index.html")
+    step = request.args.get("step", "1")
 
-@app.route("/diagnose", methods=["POST"])
-def diagnose():
-    data = request.get_json()
-    name = data.get("name")
-    age = data.get("age")
-    gender = data.get("gender")
-    location = data.get("location")
-    symptoms_input = data.get("symptoms", "")
-    days = int(re.search(r'\d+', data.get("days", "0")).group())
+    if request.method == "POST":
+        if step == "1":
+            patient_data["name"] = request.form["name"]
+            return redirect(url_for("index", step="2"))
+        elif step == "2":
+            patient_data["age"] = request.form["age"]
+            return redirect(url_for("index", step="3"))
+        elif step == "3":
+            patient_data["gender"] = request.form["gender"]
+            return redirect(url_for("index", step="4"))
+        elif step == "4":
+            patient_data["location"] = request.form["location"]
+            return redirect(url_for("index", step="5"))
+        elif step == "5":
+            patient_data["symptoms"] = request.form["symptoms"]
+            return redirect(url_for("index", step="6"))
+        elif step == "6":
+            patient_data["days"] = int(request.form["days"])
+            return redirect(url_for("result"))
 
-    # Preprocess input symptoms
-    symptoms = [s.strip().lower() for s in symptoms_input.split(",") if s.strip()]
-    input_vec = [1 if s in symptoms else 0 for s in all_symptoms]
+    return render_template("index.html", step=step, data=patient_data)
 
-    # Predict disease
-    prediction = clf.predict([input_vec])[0]
-    disease = le.inverse_transform([prediction])[0]
 
-    # Retrieve disease data
-    row = merged_df[merged_df["Disease"] == disease].iloc[0]
-    description = row["Description"]
-    precautions = [row.get(f"Precaution_{i}") for i in range(1, 5) if pd.notna(row.get(f"Precaution_{i}"))]
+@app.route("/result")
+def result():
+    # Process input
+    symptoms_input = patient_data["symptoms"].lower()
+    cleaned_input = [s.strip().replace("-", "").replace(".", "") for s in symptoms_input.split(",")]
+    input_vector = np.array([[1 if s in cleaned_input else 0 for s in symptom_list]])
 
-    # Severity level messages
+    # Predict top 5 diseases
+    probs = model.predict_proba(input_vector)[0]
+    top_indices = probs.argsort()[-5:][::-1]
+
+    results = []
+    for idx in top_indices:
+        disease = label_encoder.inverse_transform([idx])[0]
+        confidence = round(probs[idx] * 100, 2)
+        info = disease_info.get(disease, {})
+        results.append({
+            "name": disease.title(),
+            "confidence": confidence,
+            "description": info.get("description", "No description available."),
+            "precautions": info.get("precautions", [])
+        })
+
+    # Severity check based on days
+    days = patient_data["days"]
     if days <= 3:
         severity = (
-            "🟢 *Mild symptoms detected.*\n"
-            "Your condition appears mild at this stage. It’s important to rest, stay hydrated, and monitor your symptoms carefully. "
-            "Early care can make a big difference in recovery. Keep an eye on any changes, and take care of yourself."
+            "🟠 Moderate – Your symptoms may still be early. Keep resting, hydrate, and avoid physical stress. "
+            "Monitor carefully and consult a doctor if symptoms persist or worsen."
         )
     elif days <= 6:
         severity = (
-            "🟡 *Moderate symptoms detected.*\n"
-            "You’ve been feeling unwell for several days now. It is advisable to consult a doctor soon to ensure your condition doesn’t worsen. "
-            "Medical guidance can help you recover faster and avoid complications. Take it seriously and act in time."
+            "🟡 Mild to Severe – It’s time to be cautious. Don’t ignore symptoms; seek medical attention soon. "
+            "Even if symptoms are improving, it's best to rule out serious illness early."
         )
     else:
         severity = (
-            "🔴 *Severe symptoms detected.*\n"
-            "Your symptoms have persisted for more than a week. This is a strong indicator of a potential health risk. "
-            "It is critical to seek immediate medical attention. Please do not delay — your well-being matters greatly. Visit the nearest hospital now."
+            "🔴 Severe – You’ve had these symptoms for more than a week. Please visit the nearest hospital immediately. "
+            "Early medical attention saves lives. Don't delay your treatment. Your health matters most!"
         )
 
-    # Health tip
-    health_tip = (
-        "🌿 *Health Tip:*\n"
-        "Maintain a balanced diet, drink enough water, sleep at least 7 hours daily, and reduce stress. "
-        "These habits help strengthen your immune system and overall health."
-    )
+    return render_template("result.html", patient=patient_data, results=results, severity=severity)
 
-    # Add hospital visit recommendation
-    location_message = f"🏥 You are strongly advised to visit a nearby hospital in **{location}** for professional consultation and diagnosis."
 
-    # Final response
-    return jsonify({
-        "name": name,
-        "age": age,
-        "gender": gender,
-        "location": location,
-        "disease": disease,
-        "description": description,
-        "precautions": precautions,
-        "severity": severity,
-        "location_advice": location_message,
-        "health_tip": health_tip,
-        "followup": "Would you like to make another diagnosis?"
-    })
+@app.route("/restart")
+def restart():
+    patient_data.clear()
+    return redirect(url_for("index"))
+
 
 if __name__ == "__main__":
     app.run(debug=True)
