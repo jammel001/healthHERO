@@ -1,38 +1,56 @@
-<!-- templates/result.html -->
+<!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Diagnosis Result</title>
+  <title>AI Health Assistant</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <div class="chat-container">
     <div class="chat-box">
-      <p>🔎 Based on your symptoms, you may have one of the following conditions:</p>
-      {% for item in results %}
-        <div class="disease-block">
-          <p>🦠 <strong>Disease:</strong> {{ item.name }} ({{ item.confidence }}%)</p>
-          <p>📄 <strong>Description:</strong> {{ item.description }}</p>
-          <p>🛡️ <strong>Precautions:</strong></p>
-          <ul>
-            {% for p in item.precautions %}
-              <li>- {{ p }}</li>
-            {% endfor %}
-          </ul>
-        </div>
-      {% endfor %}
-
-      <p>⚠️ <strong>Severity level:</strong> {{ severity }}</p>
-
-      <p>📍 Dear {{ patient.name }}, based on the symptoms you've shared and your duration of illness,</p>
-      <p>we encourage you to visit a hospital or clinic in <strong>{{ patient.location }}</strong> for proper medical consultation.</p>
-
-      <p>💡 Always prioritize your health. Stay hydrated, eat well, and avoid self-medication.</p>
-
-      <form action="{{ url_for('restart') }}">
-        <button type="submit">🔁 Make another diagnosis</button>
-      </form>
+      {% if step == '1' %}
+        <p>🧠 Hello! I am your AI health assistant created by <strong>Bara'u Magaji Kanya</strong>.</p>
+        <p>💬 I will help you find possible diseases based on your symptoms.</p>
+        <form method="post">
+          <label>👤 Please enter your full name:</label>
+          <input type="text" name="name" required>
+          <button type="submit">Next</button>
+        </form>
+      {% elif step == '2' %}
+        <p>🎂 Your age:</p>
+        <form method="post">
+          <input type="number" name="age" required>
+          <button type="submit">Next</button>
+        </form>
+      {% elif step == '3' %}
+        <p>⚧️ Your gender (Male/Female):</p>
+        <form method="post">
+          <select name="gender" required>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+          </select>
+          <button type="submit">Next</button>
+        </form>
+      {% elif step == '4' %}
+        <p>📍 Your location:</p>
+        <form method="post">
+          <input type="text" name="location" required>
+          <button type="submit">Next</button>
+        </form>
+      {% elif step == '5' %}
+        <p>💬 List the symptoms you are experiencing (comma-separated):</p>
+        <form method="post">
+          <input type="text" name="symptoms" required placeholder="e.g. headache, cough, fever">
+          <button type="submit">Next</button>
+        </form>
+      {% elif step == '6' %}
+        <p>⏳ How many days have you had these symptoms?</p>
+        <form method="post">
+          <input type="number" name="days" required>
+          <button type="submit">Diagnose</button>
+        </form>
+      {% endif %}
     </div>
   </div>
 </body>
