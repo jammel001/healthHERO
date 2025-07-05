@@ -1,6 +1,5 @@
-Flask==2.3.3
-scikit-learn==1.4.2
-
-joblib==1.4.2
-gunicorn==22.0.0
-reportlab==4.2.0
+flask
+scikit-learn
+pandas
+numpy>=1.24,<2.0
+gunicorn
