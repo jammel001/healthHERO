@@ -3,3 +3,8 @@ pandas
 scikit-learn
 joblib
 gunicorn
+Flask==2.3.3
+scikit-learn==1.4.2
+numpy==1.26.4
+joblib==1.4.2
+gunicorn==22.0.0
