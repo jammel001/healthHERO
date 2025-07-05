@@ -1,6 +1,6 @@
 Flask==2.3.3
 scikit-learn==1.4.2
-numpy==1.26.4
+numpy
 joblib==1.4.2
 gunicorn==22.0.0
 reportlab==4.2.0
