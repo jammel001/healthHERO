@@ -1,6 +1,8 @@
-flask
-scikit-learn
-pandas
-numpy>=1.24,<2.0
-gunicorn
-reportlab
+Flask==2.3.2
+p==1.25.2
+numpy==1.25.2
+pandas==2.1.1
+tensorflow==2.13.0
+keras==2.13.1
+fpdf==1.7.2
+scikit-learn==1.3.0
