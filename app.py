@@ -1,149 +1,111 @@
+# app.py
 from flask import Flask, render_template, request, redirect, url_for, send_file
-import joblib
-import json
+import pickle
 import numpy as np
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-import io
+import pandas as pd
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from fpdf import FPDF
+import os
 
 app = Flask(__name__)
 
-# Load model and data
-model = joblib.load("disease_model.pkl")
-label_encoder = joblib.load("label_encoder.pkl")
-with open("symptom_list.json") as f:
-    symptom_list = json.load(f)
-with open("disease_info.json") as f:
-    disease_info = json.load(f)
+# Load model and tools
+model = load_model('diagnosis_model.h5')
+with open('tokenizer.pkl', 'rb') as f:
+    tokenizer = pickle.load(f)
+with open('label_encoder.pkl', 'rb') as f:
+    label_encoder = pickle.load(f)
 
-# Temporary in-memory conversation state
-patient_data = {}
+# Load dataset
+df = pd.read_csv('merged_symptoms.csv', encoding='latin1')
+max_len = 30  # Set to same max_len as during training
 
-@app.route("/", methods=["GET", "POST"])
+# PDF Generator
+class PrescriptionPDF(FPDF):
+    def header(self):
+        self.set_font('Arial', 'B', 14)
+        self.cell(0, 10, 'AI Health Diagnosis Prescription', ln=True, align='C')
+        self.ln(10)
+
+    def add_prescription(self, patient, diagnosis, precautions):
+        self.set_font('Arial', '', 12)
+        self.cell(0, 10, f"Name: {patient['name']}, Age: {patient['age']}, Gender: {patient['gender']}", ln=True)
+        self.cell(0, 10, f"Location: {patient['location']}, Duration: {patient['duration']} days", ln=True)
+        self.ln(5)
+        for d in diagnosis:
+            self.set_font('Arial', 'B', 12)
+            self.cell(0, 10, f"Disease: {d['name']}", ln=True)
+            self.set_font('Arial', '', 12)
+            self.multi_cell(0, 10, f"Description: {d['description']}")
+            self.cell(0, 10, "Precautions:", ln=True)
+            for p in d['precautions']:
+                self.cell(0, 10, f"- {p}", ln=True)
+            self.ln(5)
+
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    step = request.args.get("step", "1")
+    if request.method == 'POST':
+        return redirect(url_for('diagnosis'))
+    return render_template('index.html')
 
-    if request.method == "POST":
-        if step == "1":
-            patient_data["name"] = request.form["name"]
-            return redirect(url_for("index", step="2"))
-        elif step == "2":
-            patient_data["age"] = request.form["age"]
-            return redirect(url_for("index", step="3"))
-        elif step == "3":
-            patient_data["gender"] = request.form["gender"]
-            return redirect(url_for("index", step="4"))
-        elif step == "4":
-            patient_data["location"] = request.form["location"]
-            return redirect(url_for("index", step="5"))
-        elif step == "5":
-            patient_data["symptoms"] = request.form["symptoms"]
-            return redirect(url_for("index", step="6"))
-        elif step == "6":
-            patient_data["days"] = int(''.join(filter(str.isdigit, request.form["days"])))
-            return redirect(url_for("result"))
-
-    return render_template("index.html", step=step, data=patient_data)
-
-
-@app.route("/result")
-def result():
-    symptoms_input = patient_data["symptoms"].lower()
-    cleaned_input = [s.strip().replace("-", "").replace(".", "") for s in symptoms_input.split(",")]
-    input_vector = np.array([[1 if s in cleaned_input else 0 for s in symptom_list]])
-
-    probs = model.predict_proba(input_vector)[0]
-    top_indices = probs.argsort()[-5:][::-1]
+@app.route('/diagnosis', methods=['POST'])
+def diagnosis():
+    patient = {
+        'name': request.form['name'],
+        'age': request.form['age'],
+        'gender': request.form['gender'],
+        'duration': int(request.form['duration']),
+        'location': request.form['location']
+    }
+    symptoms_input = request.form['symptoms'].lower()
+    symptoms = symptoms_input.split(',')
+    seq = tokenizer.texts_to_sequences([symptoms_input])
+    padded = pad_sequences(seq, maxlen=max_len, padding='post')
+    pred = model.predict(padded)[0]
+    top5 = pred.argsort()[-5:][::-1]
 
     results = []
-    for idx in top_indices:
+    for idx in top5:
         disease = label_encoder.inverse_transform([idx])[0]
-        confidence = round(probs[idx] * 100, 2)
-        info = disease_info.get(disease, {})
+        row = df[df['Disease'] == disease].iloc[0]
+        precautions = [row[f'Precaution_{i}'] for i in range(1, 5) if pd.notna(row.get(f'Precaution_{i}', '')) and row.get(f'Precaution_{i}', '') != 'not specified']
         results.append({
-            "name": disease.title(),
-            "confidence": confidence,
-            "description": info.get("description", "No description available."),
-            "precautions": info.get("precautions", [])
+            'name': disease,
+            'description': row['Description'] if pd.notna(row['Description']) else 'Not available',
+            'precautions': precautions,
+            'confidence': f"{pred[idx]*100:.2f}%"
         })
 
-    days = patient_data["days"]
-    if days <= 3:
-        severity = (
-            "🟠 Moderate – Your symptoms may still be early. Keep resting, hydrate, and avoid physical stress. "
-            "Monitor carefully and consult a doctor if symptoms persist or worsen."
-        )
-    elif days <= 6:
-        severity = (
-            "🟡 Mild to Severe – It’s time to be cautious. Don’t ignore symptoms; seek medical attention soon. "
-            "Even if symptoms are improving, it's best to rule out serious illness early."
-        )
+    # Severity
+    if patient['duration'] <= 3:
+        severity = "Mild"
+    elif 4 <= patient['duration'] <= 6:
+        severity = "Moderate – You should consult a doctor."
     else:
-        severity = (
-            "🔴 Severe – You’ve had these symptoms for more than a week. Please visit the nearest hospital immediately. "
-            "Early medical attention saves lives. Don't delay your treatment. Your health matters most!"
-        )
+        severity = "Severe – Urgent medical attention advised!"
 
-    return render_template("result.html", patient=patient_data, results=results, severity=severity)
+    # Simulated hospital (can link to Google Maps API)
+    hospital = f"General Hospital near {patient['location']}"
 
+    # Save to session (or temporary file for PDF)
+    request.session_data = (patient, results)
 
-@app.route("/download")
-def download():
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4
-    y = height - 50
+    return render_template('result.html', patient=patient, results=results, severity=severity, hospital=hospital)
 
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(50, y, "🧾 AI Health Assistant Diagnosis Report")
-    y -= 30
+@app.route('/download_pdf')
+def download_pdf():
+    patient, results = request.session_data
+    pdf = PrescriptionPDF()
+    pdf.add_page()
+    pdf.add_prescription(patient, results, [])
+    filepath = 'prescription.pdf'
+    pdf.output(filepath)
+    return send_file(filepath, as_attachment=True)
 
-    c.setFont("Helvetica", 12)
-    c.drawString(50, y, f"👤 Name: {patient_data['name']}")
-    y -= 20
-    c.drawString(50, y, f"🎂 Age: {patient_data['age']} | ⚧ Gender: {patient_data['gender']}")
-    y -= 20
-    c.drawString(50, y, f"📍 Location: {patient_data['location']}")
-    y -= 20
-    c.drawString(50, y, f"💬 Symptoms: {patient_data['symptoms']}")
-    y -= 20
-    c.drawString(50, y, f"⏳ Duration: {patient_data['days']} days")
-    y -= 30
-
-    probs = model.predict_proba(np.array([[1 if s in patient_data['symptoms'].lower() else 0 for s in symptom_list]]))[0]
-    top_indices = probs.argsort()[-5:][::-1]
-
-    for idx in top_indices:
-        disease = label_encoder.inverse_transform([idx])[0]
-        info = disease_info.get(disease, {})
-        confidence = round(probs[idx] * 100, 2)
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(50, y, f"Disease: {disease.title()} ({confidence}%)")
-        y -= 15
-        c.setFont("Helvetica", 10)
-        c.drawString(60, y, "Description: " + info.get("description", "N/A"))
-        y -= 15
-        c.drawString(60, y, "Precautions:")
-        for p in info.get("precautions", []):
-            y -= 12
-            c.drawString(75, y, f"- {p}")
-        y -= 20
-        if y < 100:
-            c.showPage()
-            y = height - 50
-
-    c.setFont("Helvetica", 10)
-    c.drawString(50, y, "📄 This report is auto-generated. Please consult a medical professional.")
-    c.save()
-    buffer.seek(0)
-    return send_file(buffer, as_attachment=True, download_name="diagnosis_report.pdf", mimetype="application/pdf")
-
-
-@app.route("/restart")
+@app.route('/restart')
 def restart():
-    patient_data.clear()
-    return redirect(url_for("index"))
+    return redirect(url_for('index'))
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     app.run(debug=True)
