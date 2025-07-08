@@ -1,40 +1,36 @@
-<!-- result.html -->
+<!-- templates/result.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Diagnosis Result</title>
-    <link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8">
+  <title>Diagnosis Result</title>
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div class="container">
-        <div class="chat-box">
-            <h2>🔎 Based on your symptoms, you may have one of the following conditions:</h2>
-
-            {% for res in results %}
-                <div class="result">
-                    <h3>🦠 {{ res.name }} ({{ res.confidence }}%)</h3>
-                    <p><strong>📄 Description:</strong> {{ res.description }}</p>
-                    <p><strong>🛡️ Precautions:</strong></p>
-                    <ul>
-                        {% for p in res.precautions %}
-                            <li>{{ p }}</li>
-                        {% endfor %}
-                    </ul>
-                </div>
+  <div class="chatbox">
+    <div class="chat">
+      <p class="bot">👋 Hello {{ patient.name }}, based on your symptoms, here are the possible diagnoses:</p>
+      {% for r in results %}
+        <div class="bot">
+          <strong>🧾 {{ r.name.title() }} (Confidence: {{ r.confidence }})</strong><br>
+          <p>📖 {{ r.description }}</p>
+          <ul>
+            {% for p in r.precautions %}
+              <li>💡 {{ p }}</li>
             {% endfor %}
-
-            <p><strong>⏳ Severity level:</strong> {{ severity }}</p>
-
-            <p>📍 Dear {{ patient.name }}, based on the symptoms you've shared and your duration of illness, we encourage you to visit a hospital or clinic in {{ patient.location }} for proper medical consultation.</p>
-
-            <p>💡 Always prioritize your health. Stay hydrated, eat well, and avoid self-medication.</p>
-
-            <div class="actions">
-                <a href="/download" class="btn">⬇️ Download Prescription</a>
-                <a href="/restart" class="btn">🔁 Make Another Diagnosis</a>
-            </div>
+          </ul>
         </div>
+      {% endfor %}
+
+      <p class="bot">📊 Severity: {{ severity }}</p>
+      <p class="bot">🏥 Nearest hospital recommendation: {{ hospital }}</p>
+      <a href="/download_pdf"><button>📄 Download Prescription</button></a>
+      <br><br>
+      <p class="bot">🔁 Would you like to make another diagnosis?</p>
+      <a href="/restart"><button>🔁 Yes, Start Again</button></a>
+      <p class="bot">❤️ No? Then here’s a motivational message for you:</p>
+      <p class="bot">“Your health is your wealth. Stay strong, stay hopeful, and never hesitate to seek care when needed.” 🌟</p>
     </div>
+  </div>
 </body>
 </html>
