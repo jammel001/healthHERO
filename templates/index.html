@@ -1,54 +1,25 @@
-<!-- index.html -->
+<!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>AI Diagnosis Assistant</title>
-    <link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8">
+  <title>AI Health Assistant</title>
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div class="container">
-        <div class="chat-box">
-            {% if step == '1' %}
-                <p>🧠 Hello! I am your AI health assistant created by <strong>Bara'u Magaji</strong>.</p>
-                <p>💬 I will help you find possible diseases based on your symptoms.</p>
-                <form method="POST">
-                    <label> 👤 Please enter your full name:</label>
-                    <input type="text" name="name" required>
-                    <button type="submit">Next</button>
-                </form>
-            {% elif step == '2' %}
-                <form method="POST">
-                    <label>🎂 Your age:</label>
-                    <input type="number" name="age" required>
-                    <button type="submit">Next</button>
-                </form>
-            {% elif step == '3' %}
-                <form method="POST">
-                    <label>♂️♀️ Your gender (Male/Female):</label>
-                    <input type="text" name="gender" required>
-                    <button type="submit">Next</button>
-                </form>
-            {% elif step == '4' %}
-                <form method="POST">
-                    <label>📍 Your location:</label>
-                    <input type="text" name="location" required>
-                    <button type="submit">Next</button>
-                </form>
-            {% elif step == '5' %}
-                <form method="POST">
-                    <label>💬 List the symptoms you are experiencing (comma-separated):</label>
-                    <input type="text" name="symptoms" required>
-                    <button type="submit">Next</button>
-                </form>
-            {% elif step == '6' %}
-                <form method="POST">
-                    <label>⏳ How many days have you had these symptoms?</label>
-                    <input type="text" name="days" required>
-                    <button type="submit">Diagnose</button>
-                </form>
-            {% endif %}
-        </div>
+  <div class="chatbox">
+    <div class="chat">
+      <p class="bot">🤖 Hello! I’m your AI Health Diagnosis Assistant, Built by Bara'u Magaji. Let’s start with your details:</p>
     </div>
+    <form method="POST" action="/diagnosis">
+      <input name="name" placeholder="Full Name" required>
+      <input name="age" placeholder="Age" required>
+      <input name="gender" placeholder="Gender" required>
+      <input name="duration" placeholder="How many days have you been unwell?" required>
+      <input name="location" placeholder="Your City/Town" required>
+      <textarea name="symptoms" placeholder="How do you feel? List your symptoms (e.g., headache, cough)..." required></textarea>
+      <button type="submit">🔍 Start Diagnosis</button>
+    </form>
+  </div>
 </body>
 </html>
