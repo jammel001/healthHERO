@@ -1,88 +1,57 @@
-/* style.css */
+/* static/style.css */
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #f4f7f9;
-    margin: 0;
-    padding: 0;
+  font-family: 'Segoe UI', sans-serif;
+  background: linear-gradient(to right, #c6f0ff, #e0ffe0);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  height: 100vh;
+  padding-top: 30px;
+  margin: 0;
 }
 
-.container {
-    max-width: 600px;
-    margin: 40px auto;
-    padding: 30px;
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+.chatbox {
+  background: white;
+  border-radius: 10px;
+  padding: 20px;
+  width: 90%;
+  max-width: 600px;
+  box-shadow: 0 0 15px rgba(0,0,0,0.1);
 }
 
-.chat-box {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
+.chat p.bot {
+  background-color: #f1f1f1;
+  border-left: 5px solid #4caf50;
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 5px;
 }
 
-form {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-input[type="text"],
-input[type="number"] {
-    padding: 12px;
-    font-size: 16px;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    outline: none;
+input, textarea {
+  width: 100%;
+  padding: 10px;
+  margin-top: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  font-size: 1em;
 }
 
 button {
-    padding: 12px;
-    font-size: 16px;
-    background-color: #28a745;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background-color 0.3s;
+  padding: 10px 20px;
+  margin-top: 15px;
+  font-size: 1em;
+  border: none;
+  border-radius: 5px;
+  background-color: #4caf50;
+  color: white;
+  cursor: pointer;
+  transition: background 0.3s ease;
 }
 
 button:hover {
-    background-color: #218838;
-}
-
-.result {
-    background: #f9f9f9;
-    padding: 15px;
-    border-left: 5px solid #28a745;
-    border-radius: 8px;
-    margin-bottom: 20px;
-}
-
-.result h3 {
-    margin-top: 0;
+  background-color: #45a049;
 }
 
 ul {
-    margin-top: 0;
-    padding-left: 20px;
-}
-
-.actions {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 20px;
-}
-
-.btn {
-    text-decoration: none;
-    background-color: #007bff;
-    color: white;
-    padding: 12px 16px;
-    border-radius: 8px;
-    transition: background-color 0.3s;
-}
-
-.btn:hover {
-    background-color: #0056b3;
+  margin-left: 20px;
 }
