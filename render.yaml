@@ -1,0 +1,13 @@
+# ✅ File: render.yaml
+services:
+  - type: web
+    name: ai-health-assistant
+    env: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    buildCommand: ""
+    startCommand: ""
+    envVars:
+      - key: PORT
+        value: 10000
