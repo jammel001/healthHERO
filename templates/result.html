@@ -1,4 +1,3 @@
-<!-- templates/result.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,30 +6,33 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <div class="chatbox">
-    <div class="chat">
-      <p class="bot">👋 Hello {{ patient.name }}, based on your symptoms, here are the possible diagnoses:</p>
-      {% for r in results %}
-        <div class="bot">
-          <strong>🧾 {{ r.name.title() }} (Confidence: {{ r.confidence }})</strong><br>
-          <p>📖 {{ r.description }}</p>
+  <div class="container">
+    <h1>👤 Hello {{ name }}</h1>
+
+    {% if canceled %}
+      <p>🛑 You chose not to proceed with diagnosis.</p>
+    {% else %}
+      <h2>🔬 Predicted Diseases</h2>
+      {% for p in predictions %}
+        <div class="card">
+          <h3>{{ p.disease.title() }} ({{ p.confidence }})</h3>
+          <p>{{ p.desc }}</p>
           <ul>
-            {% for p in r.precautions %}
-              <li>💡 {{ p }}</li>
+            {% for item in p.precautions %}
+              <li>{{ item }}</li>
             {% endfor %}
           </ul>
         </div>
       {% endfor %}
 
-      <p class="bot">📊 Severity: {{ severity }}</p>
-      <p class="bot">🏥 Nearest hospital recommendation: {{ hospital }}</p>
-      <a href="/download_pdf"><button>📄 Download Prescription</button></a>
-      <br><br>
-      <p class="bot">🔁 Would you like to make another diagnosis?</p>
-      <a href="/restart"><button>🔁 Yes, Start Again</button></a>
-      <p class="bot">❤️ No? Then here’s a motivational message for you:</p>
-      <p class="bot">“Your health is your wealth. Stay strong, stay hopeful, and never hesitate to seek care when needed.” 🌟</p>
-    </div>
+      <h3>{{ severity }}</h3>
+      <p>🏥 Visit the nearest hospital in <strong>{{ location }}</strong>.</p>
+      <p class="motivation">💬 Stay positive and prioritize your health! 💚</p>
+    {% endif %}
+
+    {% if again %}
+      <a href="/" class="button">🔁 Make Another Diagnosis</a>
+    {% endif %}
   </div>
 </body>
 </html>
