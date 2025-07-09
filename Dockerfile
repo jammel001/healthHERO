@@ -1,4 +1,4 @@
-# ✅ Dockerfile for TensorFlow + Flask on Render
+# ✅ Use a full Debian-based Python image for TensorFlow compatibility
 FROM python:3.10-bullseye
 
 # Set working directory
@@ -7,13 +7,13 @@ WORKDIR /app
 # Install system dependencies required by TensorFlow
 RUN apt-get update && apt-get install -y \
     build-essential \
-    curl \
     libfreetype6-dev \
     libpng-dev \
-    libzmq3-dev \
     pkg-config \
-    git \
+    libzmq3-dev \
     unzip \
+    curl \
+    git \
     liblapack-dev \
     libblas-dev \
     gfortran \
@@ -24,16 +24,18 @@ RUN apt-get update && apt-get install -y \
     libxext6 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy all files
+# Copy all files from project folder into the container
 COPY . .
 
-# Upgrade pip & install requirements
+# Upgrade pip & install TensorFlow first
 RUN pip install --upgrade pip
 RUN pip install tensorflow==2.13.0 keras==2.13.1
+
+# Now install the rest of the Python dependencies
 RUN pip install -r requirements.txt
 
-# Expose the port Render uses
+# Expose the port expected by Render
 EXPOSE 10000
 
-# Start the Flask app via Gunicorn
+# Run the Flask app using gunicorn on port 10000
 CMD ["gunicorn", "--bind", "0.0.0.0:10000", "app:app"]
