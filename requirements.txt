@@ -1,8 +1,6 @@
 Flask==2.3.2
+tensorflow==2.15.0
+keras==3.0.0
 pandas==1.5.3
-tensorflow==2.12.0
-keras==2.12.0
-fpdf==1.7.2
-scikit-learn==1.2.2
+numpy==1.24.3
 gunicorn==21.2.0
-
