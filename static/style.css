@@ -1,62 +1,46 @@
-/* ✅ File: static/style.css */
 body {
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #f0f4f8;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  min-height: 100vh;
+    font-family: 'Segoe UI', sans-serif;
+    background-color: #f2f9ff;
+    color: #222;
+    margin: 0;
+    padding: 0;
 }
 
 .container {
-  background: #ffffff;
-  margin-top: 40px;
-  padding: 30px;
-  border-radius: 16px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-  width: 90%;
-  max-width: 600px;
+    max-width: 800px;
+    margin: 40px auto;
+    background: #fff;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.1);
 }
 
 h1, h2, h3 {
-  color: #223c66;
+    color: #0053a0;
 }
 
-input, textarea {
-  width: 100%;
-  padding: 12px;
-  margin-top: 10px;
-  margin-bottom: 20px;
-  border: 1px solid #ccc;
-  border-radius: 10px;
-  font-size: 16px;
+form input, form textarea, form select, form button {
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 16px;
 }
 
-button, .button {
-  background-color: #1e88e5;
-  color: white;
-  padding: 12px 24px;
-  text-align: center;
-  font-size: 16px;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  display: inline-block;
-  text-decoration: none;
+form button, .button {
+    background-color: #0053a0;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
 }
 
-.card {
-  background-color: #f9f9ff;
-  border: 1px solid #dbe1f1;
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 20px;
-}
-
-.motivation {
-  font-style: italic;
-  color: #1a73e8;
-  margin-top: 20px;
+form button:hover, .button:hover {
+    background-color: #0077cc;
 }
