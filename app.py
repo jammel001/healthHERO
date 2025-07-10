@@ -1,85 +1,115 @@
-# ✅ File: app.py
-from flask import Flask, render_template, request
-import pandas as pd
+from flask import Flask, render_template, request, send_file, redirect, url_for
 import joblib
+import difflib
 import re
-from difflib import get_close_matches
+from fpdf import FPDF
+import os
 
 app = Flask(__name__)
 
-# Load model components
-model = joblib.load("rf_model.pkl")
-vectorizer = joblib.load("vectorizer.pkl")
-label_encoder = joblib.load("label_encoder.pkl")
-df = pd.read_csv("merged_symptoms.csv", encoding="latin1")
+# Load model and encoders
+model = joblib.load("disease_model.pkl")
+symptom_encoder = joblib.load("symptom_encoder.pkl")
+disease_to_description = joblib.load("disease_to_description.pkl")
+disease_to_precautions = joblib.load("disease_to_precautions.pkl")
+symptom_to_explanation = joblib.load("symptom_to_explanation.pkl")
 
-# Prepare explanations
-defined = df[['Symptoms.1', 'General Explanation', 'Medical Explanation']].dropna()
-explained_symptoms = {
-    row['Symptoms.1'].strip().lower(): {
-        "general": row['General Explanation'],
-        "medical": row['Medical Explanation']
-    }
-    for _, row in defined.iterrows()
+all_symptoms = symptom_encoder.classes_
+symptom_synonyms = {
+    'fever': 'fever', 'high temperature': 'fever', 'cold': 'chills', 'nausea': 'vomiting',
+    'headach': 'headache', 'dizzy': 'dizziness', 'flu': 'sneezing', 'tired': 'fatigue'
 }
 
-@app.route("/")
+@app.route("/", methods=["GET", "POST"])
 def index():
     return render_template("index.html")
 
 @app.route("/diagnose", methods=["POST"])
 def diagnose():
-    name = request.form['name']
-    age = request.form['age']
-    gender = request.form['gender']
-    location = request.form['location']
-    duration = int(''.join(filter(str.isdigit, request.form['duration'])))
-    symptoms_input = request.form['symptoms'].lower()
-    symptoms = [s.strip() for s in symptoms_input.split(',') if s.strip()]
+    name = request.form["name"]
+    age = request.form["age"]
+    gender = request.form["gender"]
+    location = request.form["location"]
+    symptoms_raw = request.form["symptoms"].lower().split(",")
+    duration_input = request.form["duration"]
 
-    explained = []
-    confirmed_symptoms = []
-    for s in symptoms:
-        if s in explained_symptoms:
-            explained.append((s, explained_symptoms[s]['general'], explained_symptoms[s]['medical']))
-            confirmed_symptoms.append(s)
+    final_symptoms = []
+    explanations = []
+
+    for s in symptoms_raw:
+        s = s.strip().lower()
+        s = symptom_synonyms.get(s, s)
+        if s in all_symptoms:
+            final_symptoms.append(s)
+            expl = symptom_to_explanation.get(s, {})
+            explanations.append((s, expl.get("general", "No explanation available."), expl.get("medical", "No explanation available.")))
         else:
-            suggestion = get_close_matches(s, explained_symptoms.keys(), n=1, cutoff=0.6)
+            suggestion = difflib.get_close_matches(s, all_symptoms, n=1, cutoff=0.6)
             if suggestion:
-                explained.append((s, f"Did you mean '{suggestion[0]}'?", "No exact match found."))
-            else:
-                explained.append((s, "Not found", "Not found"))
+                final_symptoms.append(suggestion[0])
+                expl = symptom_to_explanation.get(suggestion[0], {})
+                explanations.append((suggestion[0], expl.get("general", "No explanation available."), expl.get("medical", "No explanation available.")))
 
-    confirm = request.form.get('confirm')
-    if confirm != "yes":
-        return render_template("result.html", name=name, canceled=True)
+    diseases = []
+    if final_symptoms:
+        X_input = symptom_encoder.transform([final_symptoms])
+        probs = model.predict_proba(X_input)[0]
+        top_indices = probs.argsort()[-5:][::-1]
+        for i in top_indices:
+            disease = model.classes_[i]
+            prob = round(probs[i] * 100, 2)
+            key = disease.lower().strip()
+            desc = disease_to_description.get(key, "No description available.")
+            precautions = disease_to_precautions.get(key, ["No precautions available."])
+            diseases.append({"name": disease.title(), "probability": prob, "description": desc, "precautions": precautions})
 
-    text = ", ".join(confirmed_symptoms)
-    X = vectorizer.transform([text])
-    prob = model.predict_proba(X)[0]
-    top5 = prob.argsort()[-5:][::-1]
-
-    predictions = []
-    for idx in top5:
-        disease = label_encoder.inverse_transform([idx])[0]
-        row = df[df['Disease'] == disease].iloc[0]
-        desc = row['Description'] if pd.notna(row['Description']) else "No description"
-        precautions = [row.get(f"Precaution_{i}", "") for i in range(1, 5) if pd.notna(row.get(f"Precaution_{i}"))]
-        predictions.append({
-            "disease": disease,
-            "confidence": f"{prob[idx]*100:.2f}%",
-            "desc": desc,
-            "precautions": precautions
-        })
-
+    duration = int(re.search(r"\d+", duration_input).group()) if re.search(r"\d+", duration_input) else 0
     if duration <= 3:
-        severity = "🟢 Mild"
+        severity = "🟢 Mild – Monitor your symptoms and rest."
+        tip = "Even mild symptoms matter. Hydrate, rest, and listen to your body."
     elif 4 <= duration <= 6:
-        severity = "🟠 Moderate – You should consult a doctor."
+        severity = "🟡 Moderate – Please consult a doctor soon."
+        tip = "Early care prevents complications. Your health is a priority."
     else:
-        severity = "🔴 Severe – Urgent medical attention advised!"
+        severity = "🔴 Severe – Seek urgent medical attention!"
+        tip = "Act now! A quick response can save your life."
 
-    return render_template("result.html", name=name, predictions=predictions, location=location, severity=severity, again=True)
+    # Generate PDF
+    pdf_path = generate_pdf(name, diseases, severity, tip)
+
+    return render_template("result.html", name=name, location=location, explanations=explanations, diseases=diseases, severity=severity, tip=tip, pdf_path=pdf_path)
+
+@app.route("/download")
+def download():
+    pdf_path = request.args.get("path")
+    return send_file(pdf_path, as_attachment=True)
+
+def generate_pdf(name, diseases, severity, tip):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(200, 10, f"Diagnosis Report for {name}", ln=True, align='C')
+    pdf.set_font("Arial", size=12)
+    pdf.ln(10)
+
+    for d in diseases:
+        pdf.multi_cell(0, 10, f"Disease: {d['name']} ({d['probability']}%)\nDescription: {d['description']}\nPrecautions: {', '.join(d['precautions'])}\n")
+        pdf.ln(2)
+
+    pdf.ln(5)
+    pdf.multi_cell(0, 10, f"Severity: {severity}\nHealth Tip: {tip}")
+
+    path = f"prescription_{name.lower().replace(' ', '_')}.pdf"
+    pdf.output(path)
+    return path
+
+@app.route("/restart")
+def restart():
+    return redirect(url_for("index"))
+
+@app.route("/end")
+def end():
+    return "<h2>🙏 Thank you for using this AI Health Assistant! Stay positive, stay healthy, and take care of yourself every day. 💖</h2>"
 
 if __name__ == "__main__":
     app.run(debug=True)
