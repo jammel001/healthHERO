@@ -1,26 +1,26 @@
-<!-- ✅ File: templates/index.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>AI Diagnosis Assistant</title>
-  <link rel="stylesheet" href="/static/style.css">
+    <title>AI Diagnosis Assistant</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <div class="container">
-    <h1>🤖 Welcome to the AI Diagnosis Assistant, Built by Bara'u Magaji</h1>
-    <form action="/diagnose" method="POST">
-      <input type="text" name="name" placeholder="Full Name" required>
-      <input type="text" name="age" placeholder="Age" required>
-      <input type="text" name="gender" placeholder="Gender" required>
-      <input type="text" name="location" placeholder="City/Town" required>
-      <input type="text" name="duration" placeholder="Illness Duration (e.g., 4 days)" required>
-      <textarea name="symptoms" placeholder="List your symptoms, separated by commas" required></textarea>
-      <p>Do you want to proceed with diagnosis?</p>
-      <label><input type="radio" name="confirm" value="yes" checked> Yes</label>
-      <label><input type="radio" name="confirm" value="no"> No</label>
-      <button type="submit">🔍 Diagnose Me</button>
+<div class="container">
+    <h1>🤖 Welcome to Your AI Health Assistant, Built by Bara'u Magaji</h1>
+    <form method="POST" action="/diagnose">
+        <input type="text" name="name" placeholder="👤 Your Name" required>
+        <input type="number" name="age" placeholder="🔢 Your Age" required>
+        <select name="gender" required>
+            <option value="">⚧️ Select Gender</option>
+            <option>Male</option>
+            <option>Female</option>
+            <option>Other</option>
+        </select>
+        <input type="text" name="location" placeholder="📍 Your Location" required>
+        <textarea name="symptoms" placeholder="💬 Enter your symptoms (comma-separated)" required></textarea>
+        <input type="text" name="duration" placeholder="⏳ Duration of illness (e.g. 5 days)" required>
+        <button type="submit">🩺 Diagnose Me</button>
     </form>
-  </div>
+</div>
 </body>
 </html>
