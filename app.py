@@ -85,23 +85,26 @@ def download():
     return send_file(pdf_path, as_attachment=True)
 
 def generate_pdf(name, diseases, severity, tip):
-    # Remove emojis or non-ASCII characters
-    severity_clean = re.sub(r'[^\x00-\x7F]+', '', severity)
-    tip_clean = re.sub(r'[^\x00-\x7F]+', '', tip)
+    def clean(text):
+        return re.sub(r'[^\x00-\x7F]+', '', str(text))  # Remove all non-ASCII characters
 
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(200, 10, f"Diagnosis Report for {name}", ln=True, align='C')
-    pdf.set_font("Arial", size=12)
+    pdf.set_font("helvetica", "B", 16)
+    pdf.cell(200, 10, clean(f"Diagnosis Report for {name}"), ln=True, align='C')
+    pdf.set_font("helvetica", size=12)
     pdf.ln(10)
 
     for d in diseases:
-        pdf.multi_cell(0, 10, f"Disease: {d['name']} ({d['probability']}%)\nDescription: {d['description']}\nPrecautions: {', '.join(d['precautions'])}\n")
+        name_clean = clean(d['name'])
+        desc_clean = clean(d['description'])
+        precautions_clean = clean(', '.join(d['precautions']))
+        prob = d['probability']
+        pdf.multi_cell(0, 10, f"Disease: {name_clean} ({prob}%)\nDescription: {desc_clean}\nPrecautions: {precautions_clean}\n")
         pdf.ln(2)
 
     pdf.ln(5)
-    pdf.multi_cell(0, 10, f"Severity: {severity_clean}\nHealth Tip: {tip_clean}")
+    pdf.multi_cell(0, 10, f"Severity: {clean(severity)}\nHealth Tip: {clean(tip)}")
 
     path = f"prescription_{name.lower().replace(' ', '_')}.pdf"
     pdf.output(path)
@@ -113,7 +116,7 @@ def restart():
 
 @app.route("/end")
 def end():
-    return "<h2>🙏 Thank you for using this AI Health Assistant! Stay positive, stay healthy, and take care of yourself every day. 💖</h2>"
+    return "<h2>🙏 Thank you for using our AI Health Assistant! Stay positive, stay healthy, and take care of yourself every day. 💖</h2>"
 
 if __name__ == "__main__":
     app.run(debug=True)
