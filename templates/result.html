@@ -1,39 +1,48 @@
-<!-- ✅ File: templates/result.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Diagnosis Result</title>
-  <link rel="stylesheet" href="/static/style.css">
+    <title>Your Diagnosis</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <div class="container">
-    <h1>👤 Hello {{ name }}</h1>
+<div class="container">
+    <h2>✅ Diagnosis Results for {{ name }}</h2>
 
-    {% if canceled %}
-      <p>🛑 You chose not to proceed with diagnosis.</p>
-    {% else %}
-      <h2>🔬 Predicted Diseases</h2>
-      {% for p in predictions %}
-        <div class="card">
-          <h3>{{ p.disease.title() }} ({{ p.confidence }})</h3>
-          <p>{{ p.desc }}</p>
-          <ul>
-            {% for item in p.precautions %}
-              <li>{{ item }}</li>
-            {% endfor %}
-          </ul>
-        </div>
-      {% endfor %}
+    <h3>🧠 Symptom Explanations</h3>
+    <ul>
+        {% for s, general, medical in explanations %}
+            <li><strong>{{ s }}</strong><br>📘 {{ general }}<br>📖 {{ medical }}</li>
+        {% endfor %}
+    </ul>
 
-      <h3>{{ severity }}</h3>
-      <p>🏥 Visit the nearest hospital in <strong>{{ location }}</strong>.</p>
-      <p class="motivation">💬 Stay positive and prioritize your health! 💚</p>
-    {% endif %}
+    <h3>🔬 Top Predicted Diseases</h3>
+    <ol>
+        {% for d in diseases %}
+            <li>
+                <strong>{{ d.name }} ({{ d.probability }}%)</strong><br>
+                📖 {{ d.description }}<br>
+                🛡️ Precautions: {{ d.precautions | join(', ') }}
+            </li>
+        {% endfor %}
+    </ol>
 
-    {% if again %}
-      <a href="/" class="button">🔁 Make Another Diagnosis</a>
-    {% endif %}
-  </div>
+    <h3>📉 Severity Level</h3>
+    <p>{{ severity }}</p>
+
+    <h3>🏥 Suggested Action</h3>
+    <p>Search for hospitals near <strong>{{ location }}</strong> using Google Maps.</p>
+
+    <h3>💡 Health Tip</h3>
+    <p>{{ tip }}</p>
+
+    <a href="/download?path={{ pdf_path }}" class="button">📄 Download Prescription (PDF)</a><br><br>
+
+    <form action="/restart">
+        <button type="submit">🔁 Diagnose Another Patient</button>
+    </form>
+    <form action="/end">
+        <button type="submit">🙏 Exit</button>
+    </form>
+</div>
 </body>
 </html>
