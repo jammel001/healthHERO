@@ -65,13 +65,13 @@ def diagnose():
 
     duration = int(re.search(r"\d+", duration_input).group()) if re.search(r"\d+", duration_input) else 0
     if duration <= 3:
-        severity = "🟢 Mild – Monitor your symptoms and rest."
+        severity = "Mild – Monitor your symptoms and rest."
         tip = "Even mild symptoms matter. Hydrate, rest, and listen to your body."
     elif 4 <= duration <= 6:
-        severity = "🟡 Moderate – Please consult a doctor soon."
+        severity = "Moderate – Please consult a doctor soon."
         tip = "Early care prevents complications. Your health is a priority."
     else:
-        severity = "🔴 Severe – Seek urgent medical attention!"
+        severity = "Severe – Seek urgent medical attention!"
         tip = "Act now! A quick response can save your life."
 
     # Generate PDF
@@ -85,6 +85,10 @@ def download():
     return send_file(pdf_path, as_attachment=True)
 
 def generate_pdf(name, diseases, severity, tip):
+    # Remove emojis or non-ASCII characters
+    severity_clean = re.sub(r'[^\x00-\x7F]+', '', severity)
+    tip_clean = re.sub(r'[^\x00-\x7F]+', '', tip)
+
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
@@ -97,7 +101,7 @@ def generate_pdf(name, diseases, severity, tip):
         pdf.ln(2)
 
     pdf.ln(5)
-    pdf.multi_cell(0, 10, f"Severity: {severity}\nHealth Tip: {tip}")
+    pdf.multi_cell(0, 10, f"Severity: {severity_clean}\nHealth Tip: {tip_clean}")
 
     path = f"prescription_{name.lower().replace(' ', '_')}.pdf"
     pdf.output(path)
