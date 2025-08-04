@@ -1,41 +1,61 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Diagnosis Result</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta charset="UTF-8">
+    <title>Diagnosis Result</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <div class="container">
-    {% if results %}
-      <h2>🔬 Based on your symptoms, {{ name }}, you may have:</h2>
-      <ul>
-        {% for disease, prob in results %}
-          <li><strong>🦠 {{ disease }}</strong> ({{ prob }}%)<br>
-              📖 {{ get_description(disease) }}<br>
-              🛡️ Precautions: {{ get_precautions(disease) | join(', ') }}</li>
-          <br>
+    <div class="container">
+        <h1>Diagnosis Result</h1>
+        <h3>Hello {{ name }}, age {{ age }} ({{ gender }})</h3>
+
+        <h3>Reported Symptoms:</h3>
+        <ul>
+        {% for item in explained_symptoms %}
+            <li><strong>{{ item.symptom }}:</strong> {{ item.explanation }}</li>
         {% endfor %}
-      </ul>
-      <h3>Severity: {{ severity }}</h3>
-      <p>{{ tip }}</p>
+        </ul>
 
-      <form method="POST" action="/diagnose">
-        <input type="hidden" name="step" value="7">
-        <button type="submit">Download Prescription PDF</button>
-      </form>
-      <br>
-      <form method="POST" action="/diagnose">
-        <input type="hidden" name="step" value="8">
-        <p>🔁 Would you like to make another diagnosis?</p>
-        <button type="submit" name="action" value="yes">Yes</button>
-        <button type="submit" name="action" value="no">No</button>
-      </form>
+        <h3>Severity Level: {{ severity }}</h3>
+        <div class="health-tip">{{ health_tip }}</div>
 
-    {% elif final_message %}
-      <h3>{{ final_message }}</h3>
-    {% endif %}
-  </div>
+        <h3>Possible Diseases:</h3>
+        {% for disease in predictions %}
+            <div>
+                <h4>{{ disease.name }}</h4>
+                <p><strong>Description:</strong> {{ disease.description }}</p>
+                <p><strong>Precautions:</strong></p>
+                <ul>
+                    {% for item in disease.precautions %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endfor %}
+
+        {% if nearest_hospital %}
+            <h3>Nearest Hospital:</h3>
+            <p>{{ nearest_hospital }}</p>
+        {% endif %}
+
+        <form action="/download_pdf" method="post">
+            <input type="hidden" name="name" value="{{ name }}">
+            <input type="hidden" name="age" value="{{ age }}">
+            <input type="hidden" name="gender" value="{{ gender }}">
+            <input type="hidden" name="severity" value="{{ severity }}">
+            <input type="hidden" name="health_tip" value="{{ health_tip }}">
+            <input type="hidden" name="summary" value="{{ summary | tojson }}">
+            <button class="download-button" type="submit">Download PDF Prescription</button>
+        </form>
+
+        <form action="/restart" method="post">
+            <button type="submit">Restart Diagnosis</button>
+        </form>
+
+        <div class="motivational-message">
+            Remember, your health is your greatest wealth. Stay strong and take care!
+        </div>
+    </div>
 </body>
 </html>
-
