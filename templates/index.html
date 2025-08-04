@@ -1,63 +1,36 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>HealthHero AI Assistant</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta charset="UTF-8">
+    <title>AI Diagnosis Assistant built by Bara'u Magaji</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <div class="container">
-    <h1>🩺 Welcome to HealthHero by Bara'u Magaji</h1>
-    <form action="/diagnose" method="POST">
-      <input type="hidden" name="step" value="{{ step or 1 }}">
+    <div class="container">
+        <h1>Wellcome to AI Healthcare Diagnosis by Bara'u Magaji</h1>
+        <form action="/diagnose" method="post">
+            <label for="name">Patient Name:</label>
+            <input type="text" id="name" name="name" required>
 
-      {% if step == 1 %}
-        <label>What's your name?</label>
-        <input type="text" name="name" required>
-      
-      {% elif step == 2 %}
-        <label>Hi {{ name }}, how old are you?</label>
-        <input type="number" name="age" required>
-      
-      {% elif step == 3 %}
-        <label>What is your gender?</label>
-        <select name="gender" required>
-          <option value="">--Select--</option>
-          <option>Male</option>
-          <option>Female</option>
-          <option>Other</option>
-        </select>
+            <label for="age">Age:</label>
+            <input type="number" id="age" name="age" required>
 
-      {% elif step == 4 %}
-        <label>How do you feel? (Mention symptoms separated by commas)</label>
-        <small>e.g., headache, fever, cough</small>
-        <input type="text" name="symptoms" required>
+            <label for="gender">Gender:</label>
+            <select id="gender" name="gender" required>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+            </select>
 
-      {% elif step == 5 %}
-        {% if explanations %}
-          <h3>✅ Symptom Explanations</h3>
-          <ul>
-            {% for s, e in explanations %}
-              <li><b>{{ s }}</b>: {{ e }}</li>
-            {% endfor %}
-          </ul>
-        {% endif %}
-        {% if suggestions %}
-          <h3>❓ Unrecognized Symptoms</h3>
-          <ul>
-            {% for s, matches in suggestions %}
-              <li>{{ s }} – Did you mean: {{ matches|join(', ') or 'No match found' }}?</li>
-            {% endfor %}
-          </ul>
-        {% endif %}
-        <button type="submit">Yes, Proceed to Diagnosis</button>
+            <label for="symptoms">How do you feel?</label>
+            <textarea id="symptoms" name="symptoms" rows="4" required></textarea>
+            <div class="symptom-hint">Hint: Enter symptoms separated by commas (e.g., fever, headache, nausea)</div>
 
-      {% elif step == 6 %}
-        <label>How many days have you been feeling this way?</label>
-        <input type="number" name="duration" required>
+            <label for="duration">How many days have you had these symptoms?</label>
+            <input type="number" id="duration" name="duration" required>
 
-      {% endif %}
-    </form>
-  </div>
+            <button type="submit">Diagnose</button>
+        </form>
+    </div>
 </body>
 </html>
