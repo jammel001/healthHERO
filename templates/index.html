@@ -1,26 +1,63 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>AI Diagnosis Assistant</title>
-    <link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8">
+  <title>HealthHero AI Assistant</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-<div class="container">
-    <h1>🤖 Welcome to Your AI Health Assistant, Built by Bara'u Magaji</h1>
-    <form method="POST" action="/diagnose">
-        <input type="text" name="name" placeholder="👤 Your Name" required>
-        <input type="number" name="age" placeholder="🔢 Your Age" required>
+  <div class="container">
+    <h1>🩺 Welcome to HealthHero by Bara'u Magaji</h1>
+    <form action="/diagnose" method="POST">
+      <input type="hidden" name="step" value="{{ step or 1 }}">
+
+      {% if step == 1 %}
+        <label>What's your name?</label>
+        <input type="text" name="name" required>
+      
+      {% elif step == 2 %}
+        <label>Hi {{ name }}, how old are you?</label>
+        <input type="number" name="age" required>
+      
+      {% elif step == 3 %}
+        <label>What is your gender?</label>
         <select name="gender" required>
-            <option value="">⚧️ Select Gender</option>
-            <option>Male</option>
-            <option>Female</option>
-            <option>Other</option>
+          <option value="">--Select--</option>
+          <option>Male</option>
+          <option>Female</option>
+          <option>Other</option>
         </select>
-        <input type="text" name="location" placeholder="📍 Your Location" required>
-        <textarea name="symptoms" placeholder="💬 Enter your symptoms (comma-separated)" required></textarea>
-        <input type="text" name="duration" placeholder="⏳ Duration of illness (e.g. 5 days)" required>
-        <button type="submit">🩺 Diagnose Me</button>
+
+      {% elif step == 4 %}
+        <label>How do you feel? (Mention symptoms separated by commas)</label>
+        <small>e.g., headache, fever, cough</small>
+        <input type="text" name="symptoms" required>
+
+      {% elif step == 5 %}
+        {% if explanations %}
+          <h3>✅ Symptom Explanations</h3>
+          <ul>
+            {% for s, e in explanations %}
+              <li><b>{{ s }}</b>: {{ e }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+        {% if suggestions %}
+          <h3>❓ Unrecognized Symptoms</h3>
+          <ul>
+            {% for s, matches in suggestions %}
+              <li>{{ s }} – Did you mean: {{ matches|join(', ') or 'No match found' }}?</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+        <button type="submit">Yes, Proceed to Diagnosis</button>
+
+      {% elif step == 6 %}
+        <label>How many days have you been feeling this way?</label>
+        <input type="number" name="duration" required>
+
+      {% endif %}
     </form>
-</div>
+  </div>
 </body>
 </html>
