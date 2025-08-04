@@ -1,46 +1,44 @@
 body {
-    font-family: 'Segoe UI', sans-serif;
-    background-color: #f2f9ff;
-    color: #222;
-    margin: 0;
-    padding: 0;
+  background-color: #e6f7ff;
+  font-family: Arial, sans-serif;
+  padding: 20px;
+  color: #003366;
 }
 
 .container {
-    max-width: 800px;
-    margin: 40px auto;
-    background: #fff;
-    padding: 30px;
-    border-radius: 12px;
-    box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+  max-width: 700px;
+  margin: auto;
+  background-color: #ffffff;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 10px rgba(0, 51, 102, 0.2);
 }
 
 h1, h2, h3 {
-    color: #0053a0;
+  color: #003366;
 }
 
-form input, form textarea, form select, form button {
-    width: 100%;
-    padding: 12px;
-    margin: 10px 0;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    font-size: 16px;
+label {
+  display: block;
+  margin: 15px 0 5px;
 }
 
-form button, .button {
-    background-color: #0053a0;
-    color: white;
-    border: none;
-    padding: 10px 16px;
-    border-radius: 6px;
-    cursor: pointer;
-    text-align: center;
-    text-decoration: none;
-    display: inline-block;
-    font-size: 16px;
+input, select, button {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 15px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
 }
 
-form button:hover, .button:hover {
-    background-color: #0077cc;
+button {
+  background-color: #0099cc;
+  color: white;
+  cursor: pointer;
+  transition: background 0.3s ease;
 }
+
+button:hover {
+  background-color: #007399;
+}
+
