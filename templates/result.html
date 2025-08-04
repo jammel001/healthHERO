@@ -1,48 +1,41 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Your Diagnosis</title>
-    <link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8">
+  <title>Diagnosis Result</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-<div class="container">
-    <h2>✅ Diagnosis Results for {{ name }}</h2>
-
-    <h3>🧠 Symptom Explanations</h3>
-    <ul>
-        {% for s, general, medical in explanations %}
-            <li><strong>{{ s }}</strong><br>📘 {{ general }}<br>📖 {{ medical }}</li>
+  <div class="container">
+    {% if results %}
+      <h2>🔬 Based on your symptoms, {{ name }}, you may have:</h2>
+      <ul>
+        {% for disease, prob in results %}
+          <li><strong>🦠 {{ disease }}</strong> ({{ prob }}%)<br>
+              📖 {{ get_description(disease) }}<br>
+              🛡️ Precautions: {{ get_precautions(disease) | join(', ') }}</li>
+          <br>
         {% endfor %}
-    </ul>
+      </ul>
+      <h3>Severity: {{ severity }}</h3>
+      <p>{{ tip }}</p>
 
-    <h3>🔬 Top Predicted Diseases</h3>
-    <ol>
-        {% for d in diseases %}
-            <li>
-                <strong>{{ d.name }} ({{ d.probability }}%)</strong><br>
-                📖 {{ d.description }}<br>
-                🛡️ Precautions: {{ d.precautions | join(', ') }}
-            </li>
-        {% endfor %}
-    </ol>
+      <form method="POST" action="/diagnose">
+        <input type="hidden" name="step" value="7">
+        <button type="submit">Download Prescription PDF</button>
+      </form>
+      <br>
+      <form method="POST" action="/diagnose">
+        <input type="hidden" name="step" value="8">
+        <p>🔁 Would you like to make another diagnosis?</p>
+        <button type="submit" name="action" value="yes">Yes</button>
+        <button type="submit" name="action" value="no">No</button>
+      </form>
 
-    <h3>📉 Severity Level</h3>
-    <p>{{ severity }}</p>
-
-    <h3>🏥 Suggested Action</h3>
-    <p>Search for hospitals near <strong>{{ location }}</strong> using Google Maps.</p>
-
-    <h3>💡 Health Tip</h3>
-    <p>{{ tip }}</p>
-
-    <a href="/download?path={{ pdf_path }}" class="button">📄 Download Prescription (PDF)</a><br><br>
-
-    <form action="/restart">
-        <button type="submit">🔁 Diagnose Another Patient</button>
-    </form>
-    <form action="/end">
-        <button type="submit">🙏 Exit</button>
-    </form>
-</div>
+    {% elif final_message %}
+      <h3>{{ final_message }}</h3>
+    {% endif %}
+  </div>
 </body>
 </html>
+
