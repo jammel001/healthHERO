@@ -18,7 +18,7 @@ with open("symptom_encoder.pkl", "rb") as f:
 with open("disease_to_description.pkl", "rb") as f:
     disease_desc = pickle.load(f)
 
-with open("disease_to_precaution.pkl", "rb") as f:
+with open("disease_to_precautions.pkl", "rb") as f:
     disease_precautions = pickle.load(f)
 
 with open("symptom_to_explanation.pkl", "rb") as f:
