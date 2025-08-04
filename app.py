@@ -1,129 +1,122 @@
 from flask import Flask, render_template, request, send_file
-import joblib
+import pickle
 import numpy as np
-import random
-import os
-from datetime import datetime
+from difflib import get_close_matches
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.pdfgen import canvas
+import os
+import uuid
 
 app = Flask(__name__)
 
-# Load all necessary files
-model = joblib.load("disease_model.pkl")
-symptom_encoder = joblib.load("symptom_encoder.pkl")
-disease_to_description = joblib.load("disease_to_description.pkl")
-disease_to_precaution = joblib.load("disease_to_precautions.pkl")
-symptom_to_explanation = joblib.load("symptom_to_explanation.pkl")
+# Load necessary files
+with open("disease_model.pkl", "rb") as f:
+    model = pickle.load(f)
+with open("symptom_encoder.pkl", "rb") as f:
+    encoder = pickle.load(f)
+with open("disease_to_descriptions.pkl", "rb") as f:
+    disease_descriptions = pickle.load(f)
+with open("disease_to_precaution.pkl", "rb") as f:
+    disease_precautions = pickle.load(f)
+with open("symptom_to_explanation.pkl", "rb") as f:
+    symptom_explanations = pickle.load(f)
 
-# Severity tips
-severity_tips = {
-    "Mild": "This seems to be a mild condition. Rest, hydrate, and monitor your symptoms.",
-    "Moderate – Consult a doctor": "You may need to consult a doctor for proper examination and medication.",
-    "Severe – Urgent medical attention advised": "Seek immediate medical attention. Do not delay visiting a hospital or clinic."
-}
+all_symptoms = list(symptom_explanations.keys())
 
-# Homepage route
+def get_severity_message(days):
+    days = int(days)
+    if days <= 3:
+        return "Mild", "Stay hydrated and monitor your symptoms closely."
+    elif 4 <= days <= 6:
+        return "Moderate – Consult a doctor", "Consider seeing a doctor if symptoms persist."
+    else:
+        return "Severe – Urgent medical attention advised", "Seek immediate medical attention!"
+
+def generate_pdf(name, age, gender, predictions, severity, tip):
+    filename = f"{uuid.uuid4().hex}_prescription.pdf"
+    filepath = os.path.join("static", filename)
+    c = canvas.Canvas(filepath, pagesize=letter)
+    width, height = letter
+
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(100, height - 50, "AI Health Diagnosis Prescription")
+
+    c.setFont("Helvetica", 12)
+    c.drawString(100, height - 100, f"Name: {name}")
+    c.drawString(100, height - 120, f"Age: {age}")
+    c.drawString(100, height - 140, f"Gender: {gender}")
+    c.drawString(100, height - 160, f"Severity Level: {severity}")
+    c.drawString(100, height - 180, f"Tip: {tip}")
+
+    y = height - 220
+    for i, disease in enumerate(predictions, 1):
+        c.setFont("Helvetica-Bold", 13)
+        c.drawString(100, y, f"{i}. {disease}")
+        y -= 20
+        c.setFont("Helvetica", 12)
+        c.drawString(120, y, f"Description: {disease_descriptions.get(disease, 'N/A')}")
+        y -= 20
+        precautions = disease_precautions.get(disease, [])
+        c.drawString(120, y, f"Precautions: {', '.join(precautions)}")
+        y -= 30
+
+    c.save()
+    return filename
+
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template("index.html")
 
-# Result route
-@app.route('/result', methods=['POST'])
-def result():
+@app.route('/diagnose', methods=['POST'])
+def diagnose():
     name = request.form['name']
     age = request.form['age']
     gender = request.form['gender']
-    raw_symptoms = request.form['symptoms']
-    duration = int(request.form['duration'])
+    symptoms_raw = request.form['symptoms']
+    duration = request.form['duration']
 
-    # Process symptoms
-    reported_symptoms = [s.strip().lower() for s in raw_symptoms.split(',') if s.strip()]
-    explained_symptoms = []
-    unknown_symptoms = []
+    symptoms = [s.strip().lower() for s in symptoms_raw.split(',') if s.strip()]
+    confirmed_symptoms = []
+    explanations = []
+    suggestions = []
 
-    valid_symptoms = list(symptom_encoder.classes_)
-
-    for sym in reported_symptoms:
-        if sym in symptom_to_explanation:
-            explained_symptoms.append((sym, symptom_to_explanation[sym]))
+    for s in symptoms:
+        if s in symptom_explanations:
+            confirmed_symptoms.append(s)
+            explanations.append(f"Symptom: {s.title()} – {symptom_explanations[s]}")
         else:
-            # Fallback: suggest a nearby match
-            similar = [vs for vs in valid_symptoms if sym[:3] in vs][:1]
-            if similar:
-                unknown_symptoms.append((sym, similar[0]))
+            close = get_close_matches(s, all_symptoms, n=1, cutoff=0.7)
+            if close:
+                suggestions.append(f"Did you mean '{close[0]}' instead of '{s}'?")
+                confirmed_symptoms.append(close[0])
+                explanations.append(f"Symptom: {close[0].title()} – {symptom_explanations[close[0]]}")
             else:
-                unknown_symptoms.append((sym, None))
+                explanations.append(f"Symptom: {s.title()} – No explanation found.")
+    
+    encoded_input = encoder.transform([' '.join(confirmed_symptoms)])
+    predictions = model.predict_proba(encoded_input)[0]
+    top_indices = predictions.argsort()[::-1][:5]
+    top_diseases = [model.classes_[i] for i in top_indices]
 
-    # Filter only known symptoms for prediction
-    valid_input = [s for s in reported_symptoms if s in valid_symptoms]
-    encoded = symptom_encoder.transform(valid_input)
-    input_vector = np.zeros(len(symptom_encoder.classes_))
-    input_vector[encoded] = 1
+    severity_level, tip = get_severity_message(duration)
+    pdf_file = generate_pdf(name, age, gender, top_diseases, severity_level, tip)
 
-    # Predict
-    prediction = model.predict_proba([input_vector])[0]
-    top_indices = prediction.argsort()[::-1][:5]
-    top_diseases = [(model.classes_[i], round(prediction[i]*100, 2)) for i in top_indices]
+    return render_template("result.html",
+                           name=name,
+                           age=age,
+                           gender=gender,
+                           explanations=explanations,
+                           suggestions=suggestions,
+                           diseases=top_diseases,
+                           descriptions=[disease_descriptions[d] for d in top_diseases],
+                           precautions=[disease_precautions[d] for d in top_diseases],
+                           severity=severity_level,
+                           tip=tip,
+                           pdf_file=pdf_file)
 
-    # Add description and precautions
-    detailed_diseases = []
-    for disease, score in top_diseases:
-        desc = disease_to_description.get(disease, "No description available.")
-        precautions = disease_to_precaution.get(disease, ["No precautions listed."])
-        detailed_diseases.append({
-            "name": disease,
-            "confidence": score,
-            "description": desc,
-            "precautions": precautions
-        })
+@app.route('/download/<filename>')
+def download(filename):
+    return send_file(os.path.join('static', filename), as_attachment=True)
 
-    # Severity
-    if duration <= 3:
-        severity = "Mild"
-    elif 4 <= duration <= 6:
-        severity = "Moderate – Consult a doctor"
-    else:
-        severity = "Severe – Urgent medical attention advised"
-
-    tip = severity_tips[severity]
-
-    return render_template("result.html", name=name, age=age, gender=gender,
-                           symptoms=reported_symptoms,
-                           explained_symptoms=explained_symptoms,
-                           unknown_symptoms=unknown_symptoms,
-                           diseases=detailed_diseases,
-                           severity=severity, tip=tip)
-
-# PDF download
-@app.route('/download', methods=['POST'])
-def download():
-    name = request.form['name']
-    age = request.form['age']
-    gender = request.form['gender']
-    diseases = request.form.getlist('diseases')
-    descs = request.form.getlist('descs')
-    tips = request.form.getlist('tips')
-
-    file_path = f"{name}_diagnosis_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
-    doc = SimpleDocTemplate(file_path, pagesize=letter)
-    styles = getSampleStyleSheet()
-    story = []
-
-    story.append(Paragraph(f"Patient: {name}, Age: {age}, Gender: {gender}", styles["Title"]))
-    story.append(Spacer(1, 12))
-
-    for i, disease in enumerate(diseases):
-        story.append(Paragraph(f"{i+1}. {disease}", styles["Heading2"]))
-        story.append(Paragraph(descs[i], styles["BodyText"]))
-        story.append(Paragraph("Precautions:", styles["Heading3"]))
-        for p in tips[i].split(','):
-            story.append(Paragraph(f"- {p.strip()}", styles["Normal"]))
-        story.append(Spacer(1, 12))
-
-    doc.build(story)
-    return send_file(file_path, as_attachment=True)
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)
