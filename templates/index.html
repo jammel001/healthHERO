@@ -2,36 +2,51 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>AI Diagnosis Assistant built by Bara'u Magaji</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <title>HealthHero AI Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="container">
-        <h1>Welcome to AI Healthcare Diagnosis, by Bara'u Magaji</h1>
-        <form action="/diagnose" method="post">
-            <label for="name">Patient Name:</label>
-            <input type="text" id="name" name="name" required>
-
-            <label for="age">Age:</label>
-            <input type="number" id="age" name="age" required>
-
-            <label for="gender">Gender:</label>
-            <select id="gender" name="gender" required>
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-                <option value="Other">Other</option>
-            </select>
-
-            <label for="symptoms">How do you feel?</label>
-            <textarea id="symptoms" name="symptoms" rows="4" required></textarea>
-            <div class="symptom-hint">Hint: Enter symptoms separated by commas (e.g., fever, headache, nausea)</div>
-
-            <label for="duration">How many days have you had these symptoms?</label>
-            <input type="number" id="duration" name="duration" required>
-
-            <button type="submit">Diagnose</button>
-        </form>
+<div class="container">
+    <div class="header">
+        <h1>🤖 HealthHero AI Assistant</h1>
+        <p>Hello! I’m <strong>HealthHero</strong>, your AI healthcare companion.  
+        I was built by <strong>Bara'u Magaji</strong> and <strong>Aliyu Muhammad Abdul</strong>  
+        to help you understand your symptoms and provide medical guidance.</p>
     </div>
+
+    {% if error %}
+        <p style="color:red; text-align:center;">{{ error }}</p>
+    {% endif %}
+
+    <div class="chat-box">
+        <div class="message bot-message">
+            👋 Welcome! Please enter your details and symptoms below.
+        </div>
+    </div>
+
+    <form action="/diagnose" method="POST">
+        <label for="name">Your Name</label>
+        <input type="text" id="name" name="name" placeholder="e.g. John Doe" required>
+
+        <label for="age">Your Age</label>
+        <input type="number" id="age" name="age" required>
+
+        <label for="gender">Gender</label>
+        <select id="gender" name="gender" required>
+            <option value="">Select Gender</option>
+            <option>Male</option>
+            <option>Female</option>
+            <option>Other</option>
+        </select>
+
+        <label for="symptoms">List Your Symptoms</label>
+        <textarea id="symptoms" name="symptoms" placeholder="e.g. fever, headache, cough" required></textarea>
+
+        <label for="duration">How many days have you had these symptoms?</label>
+        <input type="number" id="duration" name="duration" required>
+
+        <button type="submit">🩺 Diagnose</button>
+    </form>
+</div>
 </body>
 </html>
-
