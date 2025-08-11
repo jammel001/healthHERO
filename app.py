@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, send_file
 import pickle
 import joblib
 import numpy as np
+import requests
 from difflib import get_close_matches
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -14,8 +15,7 @@ app = Flask(__name__)
 try:
     with open("disease_model.pkl", "rb") as f:
         model = pickle.load(f)
-    # Load encoder as a fitted transformer (not a NumPy array)
-    encoder = joblib.load("symptom_encoder.pkl")
+    encoder = joblib.load("symptom_encoder.pkl")  # Fitted transformer
     with open("disease_to_description.pkl", "rb") as f:
         disease_descriptions = pickle.load(f)
     with open("disease_to_precautions.pkl", "rb") as f:
@@ -23,13 +23,48 @@ try:
     with open("symptom_to_explanation.pkl", "rb") as f:
         symptom_explanations = pickle.load(f)
 except Exception as e:
-    print("Error loading model files:", e)
+    print("❌ Error loading model files:", e)
     raise SystemExit("❌ Failed to load model/encoder. Check file paths and formats.")
 
 all_symptoms = list(symptom_explanations.keys())
 
+# ===== External API Helpers =====
+def fetch_healthfinder_info(condition):
+    """Fetch prevention/treatment info from HealthFinder.gov"""
+    try:
+        url = "https://health.gov/myhealthfinder/api/v3/topicsearch.json"
+        params = {"keyword": condition}
+        r = requests.get(url, params=params, timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            if "Result" in data and "Resources" in data["Result"]:
+                first = data["Result"]["Resources"]["Resource"][0]
+                return {
+                    "treatment": first.get("Title", "No treatment info"),
+                    "prevention": first.get("Sections", [{}])[0].get("Content", "No prevention info")
+                }
+    except Exception:
+        pass
+    return {"treatment": "No treatment info", "prevention": "No prevention info"}
 
-# ===== Helper Functions =====
+def fetch_openfda_drug_info(drug_name):
+    """Fetch drug details from OpenFDA"""
+    try:
+        url = f"https://api.fda.gov/drug/label.json?search=openfda.brand_name:{drug_name}&limit=1"
+        r = requests.get(url, timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            if "results" in data:
+                return {
+                    "drug_purpose": data["results"][0].get("purpose", ["No data"])[0],
+                    "drug_warnings": data["results"][0].get("warnings", ["No data"])[0],
+                    "drug_dosage": data["results"][0].get("dosage_and_administration", ["No data"])[0]
+                }
+    except Exception:
+        pass
+    return {"drug_purpose": "No data", "drug_warnings": "No data", "drug_dosage": "No data"}
+
+# ===== Core Helpers =====
 def get_severity_message(days):
     days = int(days)
     if days <= 3:
@@ -38,7 +73,6 @@ def get_severity_message(days):
         return "Moderate – Consult a doctor", "Consider seeing a doctor if symptoms persist."
     else:
         return "Severe – Urgent medical attention advised", "Seek immediate medical attention!"
-
 
 def generate_pdf(name, age, gender, predictions, severity, tip):
     filename = f"{uuid.uuid4().hex}_prescription.pdf"
@@ -71,12 +105,10 @@ def generate_pdf(name, age, gender, predictions, severity, tip):
     c.save()
     return filename
 
-
 # ===== Routes =====
 @app.route('/')
 def index():
     return render_template("index.html")
-
 
 @app.route('/diagnose', methods=['POST'])
 def diagnose():
@@ -92,28 +124,56 @@ def diagnose():
         explanations = []
         suggestions = []
 
+        symptom_details = []
+
         for s in symptoms:
             if s in symptom_explanations:
                 confirmed_symptoms.append(s)
-                explanations.append(f"Symptom: {s.title()} – {symptom_explanations[s]}")
+                local_explanation = symptom_explanations[s]
+
+                # Fetch extra info from APIs
+                healthfinder_data = fetch_healthfinder_info(s)
+                fda_data = fetch_openfda_drug_info(s)
+
+                symptom_details.append({
+                    "symptom": s.title(),
+                    "local_explanation": local_explanation,
+                    "treatment": healthfinder_data["treatment"],
+                    "prevention": healthfinder_data["prevention"],
+                    "drug_purpose": fda_data["drug_purpose"],
+                    "drug_warnings": fda_data["drug_warnings"],
+                    "drug_dosage": fda_data["drug_dosage"]
+                })
+
+                explanations.append(f"Symptom: {s.title()} – {local_explanation}")
             else:
                 close = get_close_matches(s, all_symptoms, n=1, cutoff=0.7)
                 if close:
                     suggestions.append(f"Did you mean '{close[0]}' instead of '{s}'?")
                     confirmed_symptoms.append(close[0])
-                    explanations.append(f"Symptom: {close[0].title()} – {symptom_explanations[close[0]]}")
+                    local_explanation = symptom_explanations[close[0]]
+
+                    healthfinder_data = fetch_healthfinder_info(close[0])
+                    fda_data = fetch_openfda_drug_info(close[0])
+
+                    symptom_details.append({
+                        "symptom": close[0].title(),
+                        "local_explanation": local_explanation,
+                        "treatment": healthfinder_data["treatment"],
+                        "prevention": healthfinder_data["prevention"],
+                        "drug_purpose": fda_data["drug_purpose"],
+                        "drug_warnings": fda_data["drug_warnings"],
+                        "drug_dosage": fda_data["drug_dosage"]
+                    })
+
+                    explanations.append(f"Symptom: {close[0].title()} – {local_explanation}")
                 else:
                     explanations.append(f"Symptom: {s.title()} – No explanation found.")
 
         if not confirmed_symptoms:
-            return render_template("diagnose.html", error="Please enter at least one valid symptom.")
+            return render_template("index.html", error="Please enter at least one valid symptom.")
 
-        # Transform using encoder (must be a fitted transformer)
-        try:
-            encoded_input = encoder.transform([' '.join(confirmed_symptoms)])
-        except AttributeError:
-            return render_template("diagnose.html", error="Invalid encoder object. Please update symptom_encoder.pkl.")
-
+        encoded_input = encoder.transform([' '.join(confirmed_symptoms)])
         predictions = model.predict_proba(encoded_input)[0]
         top_indices = predictions.argsort()[::-1][:5]
         top_diseases = [model.classes_[i] for i in top_indices]
@@ -121,29 +181,29 @@ def diagnose():
         severity_level, tip = get_severity_message(duration)
         pdf_file = generate_pdf(name, age, gender, top_diseases, severity_level, tip)
 
-        return render_template("result.html",
-                               name=name,
-                               age=age,
-                               gender=gender,
-                               explanations=explanations,
-                               suggestions=suggestions,
-                               diseases=top_diseases,
-                               descriptions=[disease_descriptions[d] for d in top_diseases],
-                               precautions=[disease_precautions[d] for d in top_diseases],
-                               severity=severity_level,
-                               tip=tip,
-                               pdf_file=pdf_file)
+        return render_template(
+            "result.html",
+            name=name,
+            age=age,
+            gender=gender,
+            explanations=explanations,
+            suggestions=suggestions,
+            symptom_details=symptom_details,
+            diseases=top_diseases,
+            descriptions=[disease_descriptions[d] for d in top_diseases],
+            precautions=[disease_precautions[d] for d in top_diseases],
+            severity=severity_level,
+            tip=tip,
+            pdf_file=pdf_file
+        )
 
     except Exception as e:
-        print("Error in /diagnose:", e)
-        return render_template("diagnose.html", error="An unexpected error occurred while processing your request.")
-
+        print("❌ Error in /diagnose:", e)
+        return render_template("index.html", error="An error occurred while processing your request.")
 
 @app.route('/download/<filename>')
 def download(filename):
     return send_file(os.path.join('static', filename), as_attachment=True)
 
-
 if __name__ == "__main__":
-    # Bind to 0.0.0.0 for Render public access
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
