@@ -1,53 +1,175 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>HealthHero AI Assistant</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>B.Magaji — HealthChero</title>
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<div class="container">
-    <div class="header">
-        <h1>🤖 HealthHero AI Assistant</h1>
-        <p>Hello! I’m <strong>HealthHero</strong>, your AI healthcare companion.  
-        I was built by <strong>Bara'u Magaji</strong> with <strong>Aliyu Biniyaminu</strong>and <strong>Aliyu Muhammad Abdul</strong>  
-        to help you understand your symptoms and provide medical guidance.</p>
-    </div>
-
-    {% if error %}
-        <p style="color:red; text-align:center;">{{ error }}</p>
-    {% endif %}
-
-    <div class="chat-box">
-        <div class="message bot-message">
-            👋 Welcome! Please enter your details and symptoms below.
+  <div class="page">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">BM</div>
+        <div class="brand-text">
+          <h1> B.Magaji — HealthChero</h1>
+          <p class="muted">Built by Bara'u Magaji &amp; team — Chat or Quick Form</p>
         </div>
-    </div>
+      </div>
+      <nav class="top-actions">
+        <a class="link" href="/guidelines" target="_blank">Guidelines</a>
+        <button id="restartBtn" class="btn small">Start Over</button>
+      </nav>
+    </header>
 
-    <form action="/diagnose" method="POST">
-        <label for="name">Your Name</label>
-        <input type="text" id="name" name="name" placeholder="e.g. John Doe" required>
+    <main class="container">
+      <section class="left">
+        <div class="card chatcard">
+          <div id="chatWindow" class="chat-window"></div>
 
-        <label for="age">Your Age</label>
-        <input type="number" id="age" name="age" required>
+          <div class="controls">
+            <input id="chatInput" placeholder="Describe how you feel (e.g., fever, sore throat). Press Enter to send." />
+            <button id="sendBtn" class="btn">Send</button>
+          </div>
 
-        <label for="gender">Gender</label>
-        <select id="gender" name="gender" required>
-            <option value="">Select Gender</option>
-            <option>Male</option>
-            <option>Female</option>
-            <option>Other</option>
-        </select>
+          <div class="hint">
+            <span>Tip:</span> You can type multiple symptoms separated by commas. When finished type <strong>done</strong> or use the Quick Form.
+          </div>
+        </div>
 
-        <label for="symptoms">List Your Symptoms</label>
-        <textarea id="symptoms" name="symptoms" placeholder="e.g. fever, headache, cough" required></textarea>
+        <div class="card actions">
+          <button id="simplePdf" class="btn">Download Simple PDF</button>
+          <button id="profPdf" class="btn">Download Professional PDF</button>
+          <button id="adminCsv" class="btn small">Admin: Download CSV</button>
+        </div>
+      </section>
 
-        <label for="duration">How many days have you had these symptoms?</label>
-        <input type="number" id="duration" name="duration" required>
+      <aside class="right">
+        <div class="card login">
+          <h3>Login (optional)</h3>
+          <input id="li_email" placeholder="Email" />
+          <input id="li_pass" placeholder="Password" type="password" />
+          <div class="row">
+            <button id="loginBtn" class="btn small">Login</button>
+            <button id="signupBtn" class="btn small ghost">Sign up</button>
+          </div>
+          <div id="authMsg" class="muted small"></div>
+        </div>
 
-        <button type="submit">🩺 Diagnose</button>
-    </form>
-</div>
+        <div class="card info">
+          <h4>How it works</h4>
+          <ol>
+            <li>Tell the assistant your symptoms (comma separated).</li>
+            <li>Confirm suggested matches if shown.</li>
+            <li>Provide optional name/age/sex when prompted.</li>
+            <li>Download a PDF summary when ready.</li>
+          </ol>
+          <p class="muted small">This tool provides informational guidance only and is not a medical diagnosis.</p>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="footer">
+      <div>Contact: <a href="mailto:admin@healthchero.com">admin@healthchero.com</a></div>
+      <div class="muted small">Admin key protected endpoints. Do not share it publicly.</div>
+    </footer>
+  </div>
+
+<script>
+const chatWindow = document.getElementById('chatWindow');
+const chatInput = document.getElementById('chatInput');
+const sendBtn = document.getElementById('sendBtn');
+const restartBtn = document.getElementById('restartBtn');
+const simplePdfBtn = document.getElementById('simplePdf');
+const profPdfBtn = document.getElementById('profPdf');
+const adminCsvBtn = document.getElementById('adminCsv');
+
+function appendMessage(role, text) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.textContent = text;
+  chatWindow.appendChild(div);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+async function boot() {
+  const r = await fetch('/api/boot');
+  const j = await r.json();
+  appendMessage('ai', j.message);
+}
+
+async function sendMessage(text) {
+  appendMessage('user', text);
+  try {
+    const r = await fetch('/api/message', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({message: text})
+    });
+    const j = await r.json();
+    appendMessage('ai', j.message);
+    // if suggestion present, show additional note
+    if (j.ask_confirm && j.suggestion) {
+      appendMessage('ai','Did you mean: "' + j.suggestion + '"? Reply 1/2/3, type the word, or skip.');
+    }
+  } catch (e) {
+    appendMessage('ai', 'Network or server error. Try again later.');
+  }
+}
+
+sendBtn.addEventListener('click', () => {
+  const v = chatInput.value.trim();
+  if (!v) return;
+  sendMessage(v);
+  chatInput.value = '';
+});
+
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); sendBtn.click(); }
+});
+
+restartBtn.addEventListener('click', async () => {
+  await fetch('/api/restart', {method:'POST'});
+  chatWindow.innerHTML = '';
+  boot();
+});
+
+simplePdfBtn.addEventListener('click', () => {
+  window.location.href = '/download_pdf?style=simple';
+});
+profPdfBtn.addEventListener('click', () => {
+  window.location.href = '/download_pdf?style=professional';
+});
+adminCsvBtn.addEventListener('click', () => {
+  const key = prompt('Admin key (required):');
+  if (!key) return;
+  window.location.href = '/download_csv?admin_key=' + encodeURIComponent(key);
+});
+
+document.getElementById('loginBtn').addEventListener('click', async () => {
+  const email = document.getElementById('li_email').value;
+  const pass = document.getElementById('li_pass').value;
+  const r = await fetch('/api/login', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({email, password: pass})
+  });
+  const j = await r.json();
+  document.getElementById('authMsg').textContent = j.message || JSON.stringify(j);
+});
+
+document.getElementById('signupBtn').addEventListener('click', async () => {
+  const email = document.getElementById('li_email').value;
+  const pass = document.getElementById('li_pass').value;
+  const r = await fetch('/api/signup', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({email, password: pass})
+  });
+  const j = await r.json();
+  document.getElementById('authMsg').textContent = j.message || JSON.stringify(j);
+});
+
+// boot the assistant
+boot();
+</script>
 </body>
 </html>
-
