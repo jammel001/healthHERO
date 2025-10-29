@@ -1,164 +1,49 @@
-/* ===== Global Styling ===== */
-body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #e3f2fd, #f1f8e9);
-    margin: 0;
-    padding: 0;
-    color: #333;
-}
+/* Clean Medical Blue theme - style.css */
 
-/* ===== Container ===== */
-.container {
-    max-width: 800px;
-    margin: 40px auto;
-    background: #ffffff;
-    padding: 25px;
-    border-radius: 12px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
-}
+/* Basic resets */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html,body { height: 100%; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background: #f8fbff; color: #0b2336; -webkit-font-smoothing:antialiased; }
 
-/* ===== Header / Welcome ===== */
-.header {
-    text-align: center;
-    padding-bottom: 20px;
-}
+/* Page layout */
+.page { display: flex; flex-direction: column; min-height: 100vh; }
+.topbar { display:flex; justify-content:space-between; align-items:center; padding:16px 24px; background:transparent; }
+.brand { display:flex; gap:12px; align-items:center; }
+.logo { width:56px; height:56px; border-radius:10px; background: linear-gradient(135deg,#e6f0ff,#cfe6ff); display:flex; align-items:center; justify-content:center; font-weight:700; color:#0b84ff; font-size:18px; }
+.brand-text h1 { font-size:18px; margin-bottom:4px; }
+.muted { color:#6b7280; font-size:13px; }
 
-.header h1 {
-    color: #2e7d32;
-    font-size: 2rem;
-    margin-bottom: 8px;
-}
+.container { display:flex; gap:18px; padding:20px; max-width:1100px; margin:0 auto; flex:1; }
+.left { flex: 1 1 680px; }
+.right { width:320px; }
 
-.header p {
-    color: #555;
-    font-size: 1rem;
-}
+/* Cards */
+.card { background:#ffffff; border-radius:12px; padding:16px; box-shadow: 0 6px 18px rgba(11,34,54,0.06); margin-bottom:16px; }
+.chatcard { display:flex; flex-direction:column; height:520px; }
+.chat-window { flex:1; overflow:auto; padding:12px; border-radius:10px; border:1px solid #e6eefb; background:#f7fbff; }
+.controls { display:flex; gap:8px; margin-top:10px; }
+.controls input[type="text"], .controls input, .controls textarea, input#chatInput { flex:1; padding:10px 12px; border-radius:10px; border:1px solid #e6eefb; background:#fff; }
+input#chatInput { height:42px; }
 
-/* ===== Chat Container ===== */
-.chat-box {
-    max-height: 400px;
-    overflow-y: auto;
-    padding: 10px;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    background-color: #fafafa;
-    margin-bottom: 20px;
-}
+.btn { background:#0b84ff; color:white; border:none; padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:600; }
+.btn.small { padding:8px 10px; font-size:14px; }
+.btn.ghost { background:transparent; color:#0b84ff; border:1px solid #e6eefb; }
 
-.message {
-    display: inline-block;
-    padding: 12px 16px;
-    border-radius: 16px;
-    margin-bottom: 10px;
-    max-width: 80%;
-    font-size: 0.95rem;
-    line-height: 1.4;
-}
+/* message bubbles */
+.msg { margin:8px 0; display:block; max-width:92%; padding:8px 12px; border-radius:10px; }
+.msg.ai { background:#eaf5ff; color:#06324a; align-self:flex-start; }
+.msg.user { background:#dbefff; color:#06263a; align-self:flex-end; margin-left:auto; }
 
-.bot-message {
-    background-color: #e8f5e9;
-    color: #1b5e20;
-    align-self: flex-start;
-}
+/* Right column */
+.login input { width:100%; padding:10px; margin:8px 0; border-radius:8px; border:1px solid #e6eefb; }
+.login .row { display:flex; gap:8px; margin-top:6px; }
+.info ol { margin-left:16px; margin-top:8px; }
 
-.user-message {
-    background-color: #bbdefb;
-    color: #0d47a1;
-    align-self: flex-end;
-    margin-left: auto;
-}
+/* Footer */
+.footer { padding:12px 24px; text-align:center; color:#6b7280; font-size:13px; }
 
-/* ===== Form ===== */
-form {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-
-label {
-    font-weight: bold;
-    color: #2e7d32;
-}
-
-input, textarea, select {
-    padding: 12px;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    font-size: 1rem;
-    width: 100%;
-}
-
-textarea {
-    resize: vertical;
-    min-height: 80px;
-}
-
-/* ===== Button ===== */
-button {
-    padding: 12px;
-    background-color: #2e7d32;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    font-size: 1rem;
-    cursor: pointer;
-    transition: background 0.2s ease;
-}
-
-button:hover {
-    background-color: #1b5e20;
-}
-
-/* ===== Diagnosis Result ===== */
-.result-section {
-    margin-top: 20px;
-}
-
-.result-section h2 {
-    color: #2e7d32;
-    margin-bottom: 10px;
-}
-
-.result-card {
-    background-color: #f1f8e9;
-    padding: 15px;
-    border-radius: 8px;
-    margin-bottom: 15px;
-}
-
-.result-card h3 {
-    margin-top: 0;
-    color: #1b5e20;
-}
-
-.result-card p {
-    margin: 6px 0;
-    font-size: 0.95rem;
-}
-
-/* ===== Download Link ===== */
-.download-btn {
-    display: inline-block;
-    background-color: #0d47a1;
-    color: white;
-    padding: 10px 16px;
-    border-radius: 8px;
-    text-decoration: none;
-    margin-top: 10px;
-}
-
-.download-btn:hover {
-    background-color: #08306b;
-}
-
-/* ===== Responsive ===== */
-@media (max-width: 600px) {
-    .container {
-        margin: 10px;
-        padding: 15px;
-    }
-
-    .chat-box {
-        max-height: 300px;
-    }
+/* Responsive */
+@media (max-width: 900px) {
+  .container { flex-direction:column; padding:12px; }
+  .right { width:100%; }
+  .chatcard { height:480px; }
 }
