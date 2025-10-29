@@ -1,0 +1,22 @@
+services:
+  - name: healthchero
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app.inference:APP --timeout 120 --workers 2
+    envVars:
+      - key: FLASK_SECRET_KEY
+        sync: false
+      - key: ADMIN_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: MODEL_PKL
+        value: model/model_tables.pkl
+      - key: SYMPTOM_EMB
+        value: model/symptom_embeddings.npz
+      - key: DATABASE_URL
+        value: sqlite:///database/careguide.db
+      - key: SESSION_TYPE
+        value: filesystem
