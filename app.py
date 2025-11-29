@@ -33,14 +33,14 @@ from reportlab.lib.units import mm
 # Config
 # ---------------------------
 app = Flask(__name__)
-CORS(APP)
-APP.wsgi_app = ProxyFix(APP.wsgi_app)
-APP.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-this-secret")
+CORS(app)
+app.wsgi_app = ProxyFix(APP.wsgi_app)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-this-secret")
 # Session (persistent on filesystem by default; use redis in prod via env)
-APP.config['SESSION_TYPE'] = os.environ.get("SESSION_TYPE", "filesystem")
-APP.config['SESSION_FILE_DIR'] = './flask_session'
-APP.config['SESSION_PERMANENT'] = False
-Session(APP)
+app.config['SESSION_TYPE'] = os.environ.get("SESSION_TYPE", "filesystem")
+app.config['SESSION_FILE_DIR'] = './flask_session'
+app.config['SESSION_PERMANENT'] = False
+Session(app)
 
 # Files & env
 MODEL_PKL = os.environ.get("MODEL_PKL", "model_tables.pkl")
