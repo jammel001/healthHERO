@@ -34,7 +34,7 @@ from reportlab.lib.units import mm
 # ---------------------------
 app = Flask(__name__)
 CORS(app)
-app.wsgi_app = ProxyFix(APP.wsgi_app)
+app.wsgi_app = ProxyFix(app.wsgi_app)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-this-secret")
 # Session (persistent on filesystem by default; use redis in prod via env)
 app.config['SESSION_TYPE'] = os.environ.get("SESSION_TYPE", "filesystem")
@@ -841,7 +841,7 @@ def download_csv():
 # ---------------------------
 # Health endpoint
 # ---------------------------
-@APP.route('/health')
+@app.route('/health')
 def health():
     return jsonify({"status":"ok","model_loaded": bool(MODEL_DICT), "embeddings_loaded": bool(SYM_EMB)})
 
@@ -850,4 +850,4 @@ def health():
 # Run
 # ---------------------------
 if __name__ == "__main__":
-    APP.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), debug=False)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), debug=False)
