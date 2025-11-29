@@ -32,7 +32,7 @@ from reportlab.lib.units import mm
 # ---------------------------
 # Config
 # ---------------------------
-APP = Flask(__name__)
+app = Flask(__name__)
 CORS(APP)
 APP.wsgi_app = ProxyFix(APP.wsgi_app)
 APP.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-this-secret")
