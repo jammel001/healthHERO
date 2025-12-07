@@ -122,22 +122,19 @@ symptom_embeddings = safe_numpy(SYM_EMB)
 # MODEL BUNDLE
 # ---------------------------
 class ModelBundle:
+    class ModelBundle:
     def __init__(self):
         self.model = disease_model
         self.label_encoder = label_encoder
         self.symptoms = list(symptom_encoder.classes_) if symptom_encoder is not None else []
-        self.embedding_vocab = symptom_embeddings["vocab"] if symptom_embeddings is not None else []
-        self.embedding_matrix = symptom_embeddings["vectors"] if symptom_embeddings is not None else None
 
-    def match_symptoms(self, symptoms: List[str]) -> List[str]:
-        matched = []
-        for s in symptoms:
-            if s in self.symptoms:
-                matched.append(s)
-            else:
-                suggestions = process.extract(s, self.symptoms, limit=1, score_cutoff=80)
-                if suggestions:
-                    matched.append(suggestions[0][0])
+        if symptom_embeddings is not None:
+            self.embedding_vocab = list(symptom_embeddings.files)
+            self.embedding_matrix = symptom_embeddings[self.embedding_vocab[0]]
+        else:
+            self.embedding_vocab = []
+            self.embedding_matrix = None
+
         return list(set(matched))
 
     def predict(self, matched: List[str]) -> Dict[str, Any]:
