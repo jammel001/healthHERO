@@ -134,8 +134,6 @@ class ModelBundle:
             self.embedding_vocab = []
             self.embedding_matrix = None
 
-        return list(set(matched))
-
     def predict(self, matched: List[str]) -> Dict[str, Any]:
         if not matched or self.model is None:
             return {"condition": "Unknown", "prob": 0, "advice": "Model unavailable"}
