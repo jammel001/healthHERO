@@ -1,4 +1,3 @@
-# app.py
 import os
 import io
 import csv
@@ -7,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 
 from flask import (
-    Flask, request, jsonify, render_template_string, session, send_file, redirect, url_for
+    Flask, request, jsonify, render_template, session, send_file
 )
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -35,34 +34,44 @@ from reportlab.lib.units import mm
 app = Flask(__name__)
 CORS(app)
 app.wsgi_app = ProxyFix(app.wsgi_app)
+
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-this-secret")
-# Session (persistent on filesystem by default; use redis in prod via env)
-app.config['SESSION_TYPE'] = os.environ.get("SESSION_TYPE", "filesystem")
+
+app.config['SESSION_TYPE'] = "filesystem"
 app.config['SESSION_FILE_DIR'] = './flask_session'
 app.config['SESSION_PERMANENT'] = False
 Session(app)
 
-# Files & env
-MODEL_PKL = os.environ.get("MODEL_PKL", "model_tables.pkl")
-SYMPTOM_EMB = os.environ.get("SYMPTOM_EMB", "symptom_embeddings.npz")
-ADMIN_KEY = os.environ.get("ADMIN_KEY", "change-this-admin-key")
-DB_URL = os.environ.get("DATABASE_URL", "sqlite:///careguide.db")
-LOG_CSV = os.environ.get("LOG_CSV", "chat_logs.csv")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------------------
-# Database (SQLAlchemy)
+# FILE PATHS
+# ---------------------------
+MODEL_TABLES = os.path.join(BASE_DIR, "model_tables.pkl")
+SYM_EMB = os.path.join(BASE_DIR, "symptom_embeddings.npz")
+SYM_ENCODER = os.path.join(BASE_DIR, "symptom_encoder.pkl")
+SYM_EXPLANATION = os.path.join(BASE_DIR, "symptom_to_explanation.pkl")
+DISEASE_MODEL = os.path.join(BASE_DIR, "disease_model.pkl")
+DISEASE_DESC = os.path.join(BASE_DIR, "disease_to_description.pkl")
+DISEASE_PRECAUTIONS = os.path.join(BASE_DIR, "disease_to_precautions.pkl")
+LABEL_ENCODER = os.path.join(BASE_DIR, "label_encoder.pkl")
+
+DB_URL = os.environ.get("DATABASE_URL", "sqlite:///careguide.db")
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "change-this-admin-key")
+
+# ---------------------------
+# Database
 # ---------------------------
 engine = create_engine(DB_URL, echo=False, future=True)
 Base = declarative_base()
 DBSession = sessionmaker(bind=engine)
-
 
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
     email = Column(String(256), unique=True, nullable=False)
     password_hash = Column(String(512), nullable=False)
-    display_name = Column(String(128), nullable=True)
+    display_name = Column(String(128))
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -70,582 +79,213 @@ class Assessment(Base):
     __tablename__ = "assessments"
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
-    symptoms_entered = Column(Text)  # raw text
-    matched_symptoms = Column(Text)  # canonical list joined by ;
+    symptoms_entered = Column(Text)
+    matched_symptoms = Column(Text)
     predicted_condition = Column(String(256))
     probability = Column(Float)
     advice = Column(Text)
-    urgent_flag = Column(Boolean, default=False)
-    external_sources = Column(Text)  # json dump
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", backref="assessments")
 
-
 Base.metadata.create_all(engine)
 
 # ---------------------------
-# Model loading
+# LOAD ALL MODEL FILES
 # ---------------------------
-def safe_load_model():
+def safe_load(path):
     try:
-        model_dict = joblib.load(MODEL_PKL)
+        return joblib.load(path)
     except Exception as e:
-        print("Model load error:", e)
-        model_dict = {}
+        print(f"ERROR loading {path}:", e)
+        return None
+
+
+def safe_numpy(path):
     try:
-        emb_npz = np.load(SYMPTOM_EMB, allow_pickle=True)
-        emb = {k: emb_npz[k] for k in emb_npz.files}
+        return np.load(path, allow_pickle=True)
     except Exception as e:
-        print("Embeddings load error:", e)
-        emb = {}
-    return model_dict, emb
+        print(f"ERROR loading {path}:", e)
+        return None
 
 
-MODEL_DICT, SYM_EMB = safe_load_model()
+model_tables = safe_load(MODEL_TABLES)
+symptom_encoder = safe_load(SYM_ENCODER)
+symptom_explanations = safe_load(SYM_EXPLANATION)
+disease_model = safe_load(DISEASE_MODEL)
+disease_descriptions = safe_load(DISEASE_DESC)
+disease_precautions = safe_load(DISEASE_PRECAUTIONS)
+label_encoder = safe_load(LABEL_ENCODER)
+symptom_embeddings = safe_numpy(SYM_EMB)
 
-
+# ---------------------------
+# MODEL BUNDLE
+# ---------------------------
 class ModelBundle:
-    def __init__(self, model_dict: Dict[str, Any], emb: Dict[str, Any]):
-        self.clf = model_dict.get('clf')
-        self.symptom_index = model_dict.get('symptom_index', {}) or {}
-        self.disease_index = model_dict.get('disease_index', {}) or {}
-        self.disease_info = model_dict.get('disease_info', {}) or {}
-        self.vocab = list(emb.get('vocab', [])) if emb else []
-        self.vectors = emb.get('vectors', None) if emb else None
-        if isinstance(self.vectors, np.ndarray):
-            norms = np.linalg.norm(self.vectors, axis=1, keepdims=True)
-            norms[norms == 0] = 1e-12
-            self.vectors = self.vectors / norms
+    def __init__(self):
+        self.model = disease_model
+        self.label_encoder = label_encoder
+        self.symptoms = list(symptom_encoder.classes_) if symptom_encoder is not None else []
+        self.embedding_vocab = symptom_embeddings["vocab"] if symptom_embeddings is not None else []
+        self.embedding_matrix = symptom_embeddings["vectors"] if symptom_embeddings is not None else None
 
-    def match_symptoms(self, raw_terms: List[str]) -> List[str]:
-        # match via exact or embedding similarity fallback
-        if not self.vectors or len(self.vocab) == 0:
-            # exact only
-            matched = [t for t in raw_terms if t in self.symptom_index]
-            return matched
+    def match_symptoms(self, symptoms: List[str]) -> List[str]:
         matched = []
-        for term in raw_terms:
-            v = embed_text(term)
-            if v is None:
-                continue
-            v = v / (np.linalg.norm(v) + 1e-12)
-            sims = self.vectors @ v
-            best_idx = int(np.argmax(sims))
-            if sims[best_idx] >= 0.45:
-                matched.append(self.vocab[best_idx])
-        # dedupe while preserving order
-        seen = set()
-        out = []
-        for x in matched:
-            if x not in seen:
-                seen.add(x)
-                out.append(x)
-        return out
-
-    def predict(self, matched_symptoms: List[str]) -> Dict[str, Any]:
-        x = np.zeros((1, len(self.symptom_index)), dtype=float)
-        for s in matched_symptoms:
-            idx = self.symptom_index.get(s)
-            if idx is not None and idx < x.shape[1]:
-                x[0, idx] = 1.0
-        if self.clf is None:
-            return {"condition": "model-missing", "proba": 0.0, "advice": "Model unavailable"}
-        try:
-            if hasattr(self.clf, "predict_proba"):
-                proba_vec = self.clf.predict_proba(x)[0]
-                top_idx = int(np.argmax(proba_vec))
-                proba = float(proba_vec[top_idx])
+        for s in symptoms:
+            if s in self.symptoms:
+                matched.append(s)
             else:
-                top_idx = int(self.clf.predict(x)[0])
-                proba = None
-        except Exception:
-            top_idx = 0
-            proba = None
-        cond = self.decode_condition(top_idx)
-        info = self.disease_info.get(cond, {})
+                suggestions = process.extract(s, self.symptoms, limit=1, score_cutoff=80)
+                if suggestions:
+                    matched.append(suggestions[0][0])
+        return list(set(matched))
+
+    def predict(self, matched: List[str]) -> Dict[str, Any]:
+        if not matched or self.model is None:
+            return {"condition": "Unknown", "prob": 0, "advice": "Model unavailable"}
+
+        X = np.zeros((1, len(self.symptoms)))
+        for sym in matched:
+            if sym in self.symptoms:
+                idx = self.symptoms.index(sym)
+                X[0, idx] = 1
+
+        probs = self.model.predict_proba(X)[0]
+        idx = np.argmax(probs)
+        label = self.label_encoder.inverse_transform([idx])[0]
+        prob = float(probs[idx])
+
+        desc = disease_descriptions.get(label, "No description")
+        precautions = disease_precautions.get(label, [])
+
         return {
-            "condition": cond,
-            "proba": proba,
-            "advice": info.get("advice", "Follow up with your clinician"),
-            "precautions": info.get("precautions", [])
+            "condition": label,
+            "prob": prob,
+            "description": desc,
+            "precautions": precautions
         }
 
-    def decode_condition(self, idx: int) -> str:
-        if isinstance(self.disease_index, dict):
-            return self.disease_index.get(idx, f"Class_{idx}")
-        if isinstance(self.disease_index, (list, tuple)) and 0 <= idx < len(self.disease_index):
-            return str(self.disease_index[idx])
-        return f"Class_{idx}"
-
-
-BUNDLE = ModelBundle(MODEL_DICT, SYM_EMB)
+BUNDLE = ModelBundle()
 
 # ---------------------------
-# Utils: embedding & fuzz
+# Routes (HTML pages)
 # ---------------------------
-def embed_text(text: str, dim: int = 300) -> Optional[np.ndarray]:
-    # deterministic pseudo-embedding (fast). Replace with a real model for production.
-    rng = np.random.default_rng(abs(hash(text)) % (2**32))
-    return rng.standard_normal(dim)
+@app.route("/")
+def home():
+    return render_template("index.html")
 
 
-def fuzzy_suggest(term: str, limit: int = 3, cutoff: int = 60) -> List[str]:
-    candidates = list(BUNDLE.symptom_index.keys())
-    if not candidates:
-        return []
-    matches = process.extract(term, candidates, scorer=fuzz.WRatio, limit=limit, score_cutoff=cutoff)
-    return [m[0] for m in matches]
-
-# ---------------------------
-# External medical APIs (with caching)
-# ---------------------------
-_external_cache = {}
-CACHE_TTL = timedelta(hours=24)
-
-
-def _cache_get(key: str):
-    rec = _external_cache.get(key)
-    if not rec:
-        return None
-    value, ts = rec
-    if datetime.utcnow() - ts > CACHE_TTL:
-        del _external_cache[key]
-        return None
-    return value
-
-
-def _cache_set(key: str, value: Any):
-    _external_cache[key] = (value, datetime.utcnow())
-
-
-def fetch_healthfinder(condition: str) -> Dict[str, Any]:
-    # simple cached fetch; real API might differ; keep safe
-    key = f"hf:{condition}"
-    c = _cache_get(key)
-    if c is not None:
-        return c
-    try:
-        url = "https://health.gov/myhealthfinder/api/v3/topicsearch.json"
-        r = requests.get(url, params={"keyword": condition}, timeout=6)
-        if r.status_code == 200:
-            data = r.json()
-            _cache_set(key, data)
-            return data
-    except Exception:
-        pass
-    res = {"message": "No external healthfinder data"}
-    _cache_set(key, res)
-    return res
-
-
-def fetch_openfda(drug: str) -> Dict[str, Any]:
-    key = f"fda:{drug}"
-    c = _cache_get(key)
-    if c is not None:
-        return c
-    try:
-        url = f"https://api.fda.gov/drug/label.json"
-        params = {"search": f"openfda.brand_name:{drug}", "limit": 1}
-        r = requests.get(url, params=params, timeout=6)
-        if r.status_code == 200:
-            _cache_set(key, r.json())
-            return r.json()
-    except Exception:
-        pass
-    out = {"message": "No openfda data"}
-    _cache_set(key, out)
-    return out
-
-
-def fetch_who_lookup(term: str) -> Dict[str, Any]:
-    key = f"who:{term}"
-    c = _cache_get(key)
-    if c is not None:
-        return c
-    # Placeholder: WHO APIs may require different endpoints
-    res = {"message": "No WHO data (placeholder)"}
-    _cache_set(key, res)
-    return res
-
-# ---------------------------
-# Safety & urgent checks
-# ---------------------------
-URGENT_KEYWORDS = {
-    "chest pain", "difficulty breathing", "shortness of breath", "severe bleeding",
-    "loss of consciousness", "sudden weakness", "sudden numbness", "severe allergic reaction"
-}
-
-
-def check_urgent(symptoms: List[str]) -> bool:
-    sset = set([t.lower() for t in symptoms])
-    for k in URGENT_KEYWORDS:
-        if k in sset:
-            return True
-    # also check tokens
-    for term in symptoms:
-        for k in URGENT_KEYWORDS:
-            if k in term.lower():
-                return True
-    return False
-
-# ---------------------------
-# Session helpers & init
-# ---------------------------
-def init_state():
-    # Only initialize if absent
-    session.setdefault('stage', 'ask_symptoms')
-    session.setdefault('symptoms', [])
-    session.setdefault('pending_suggestions', [])
-    session.setdefault('pending_term', None)
-    session.setdefault('patient', {})
-    session.setdefault('last_result', None)
-
-
-def reset_state():
-    session.clear()
-    init_state()
-
-
-
-
-@app.route('/guidelines')
+@app.route("/guidelines")
 def guidelines():
-    return render_template_string(GUIDE_HTML)
+    return render_template("guidelines.html")
 
 
-@app.route('/api/signup', methods=['POST'])
-def signup():
-    data = request.json or {}
-    email = (data.get('email') or '').strip().lower()
-    password = data.get('password') or ''
-    if not email or not password:
-        return jsonify({"ok": False, "message": "Email and password required"}), 400
-    db = DBSession()
-    if db.query(User).filter_by(email=email).first():
-        return jsonify({"ok": False, "message": "Email already registered"}), 400
-    user = User(email=email, password_hash=generate_password_hash(password), display_name=email.split('@')[0])
-    db.add(user); db.commit()
-    return jsonify({"ok": True, "message": "Account created. Please login."})
-
-
-@app.route('/api/login', methods=['POST'])
-def login():
-    data = request.json or {}
-    email = (data.get('email') or '').strip().lower(); password = data.get('password') or ''
-    if not email or not password:
-        return jsonify({"ok": False, "message": "Email and password required"}), 400
-    db = DBSession()
-    user = db.query(User).filter_by(email=email).first()
-    if not user or not check_password_hash(user.password_hash, password):
-        return jsonify({"ok": False, "message": "Invalid credentials"}), 401
-    # store user id in session
-    session['user_id'] = user.id
-    session['user_email'] = user.email
-    session['user_name'] = user.display_name
-    return jsonify({"ok": True, "message": f"Logged in as {user.email}"})
-
-
-@app.route('/api/logout', methods=['POST'])
-def logout():
-    session.pop('user_id', None)
-    session.pop('user_email', None)
-    session.pop('user_name', None)
-    return jsonify({"ok": True})
+@app.route("/result")
+def result_page():
+    data = session.get("last_result")
+    if not data:
+        return render_template("result.html", result=None)
+    return render_template("result.html", result=data)
 
 
 # ---------------------------
-# Conversation & form endpoints
+# API
 # ---------------------------
-@app.route('/api/boot')
-def api_boot():
-    # initialize conversation once
-    reset_state()
-    session['stage'] = 'ask_symptoms'
-    return jsonify({"message": "Hello! I'm HealthChero (B.Magaji). Describe your symptoms separated by commas, or use the Quick Form."})
-
-
-@app.route('/api/restart', methods=['POST'])
-def api_restart():
-    reset_state()
-    return jsonify({"ok": True})
-
-
 def parse_tokens(text: str) -> List[str]:
     return [t.strip().lower() for t in text.replace(';', ',').split(',') if t.strip()]
 
 
-@app.route('/api/message', methods=['POST'])
-def api_message():
-    init_state()
+@app.route("/api/diagnose", methods=["POST"])
+def diagnose():
     data = request.json or {}
-    text = (data.get('message') or '').strip()
-    stage = session.get('stage', 'ask_symptoms')
+    symptoms_raw = data.get("symptoms", "")
+    name = data.get("name", "Anonymous")
 
-    # handle pending suggestions (user chose 1/2/3 or typed yes/no)
-    if session.get('pending_suggestions'):
-        suggestions = session.get('pending_suggestions') or []
-        low = text.lower().strip()
-        if low in ('skip', 'no'):
-            session['pending_suggestions'] = []
-            session['pending_term'] = None
-            return jsonify({"message": "Okay, skipped that term. Add more symptoms or type 'done'."})
-        # numeric choices
-        if low in ('1', '2', '3'):
-            idx = int(low) - 1
-            if 0 <= idx < len(suggestions):
-                chosen = suggestions[idx]
-                syms = session.get('symptoms', [])
-                if chosen not in syms:
-                    syms.append(chosen)
-                session['symptoms'] = syms
-                session['pending_suggestions'] = []
-                session['pending_term'] = None
-                return jsonify({"message": f"Added: {chosen}. Add more or type 'done'."})
-        # typed exact suggestion
-        for s in suggestions:
-            if low == s.lower():
-                syms = session.get('symptoms', [])
-                if s not in syms:
-                    syms.append(s)
-                session['symptoms'] = syms
-                session['pending_suggestions'] = []
-                session['pending_term'] = None
-                return jsonify({"message": f"Added: {s}. Add more or type 'done'."})
-        return jsonify({"message": f"Please reply 1/2/3, type the correct word, or 'skip'. Suggestions: {', '.join([f'{i+1}. {w}' for i,w in enumerate(suggestions)])}"})
-
-    # main state machine
-    if stage == 'ask_symptoms':
-        if text.lower() in ('done', 'finish', 'end'):
-            if not session.get('symptoms'):
-                return jsonify({"message": "Please add at least one symptom before finishing."})
-            session['stage'] = 'ask_name'
-            return jsonify({"message": "Got it. Please enter patient name (optional) or type 'skip'."})
-        tokens = parse_tokens(text)
-        if not tokens:
-            return jsonify({"message": "Please describe your symptoms (comma separated) or use Quick Form."})
-        added = []
-        for term in tokens:
-            if term in BUNDLE.symptom_index:
-                if term not in session['symptoms']:
-                    session['symptoms'].append(term); added.append(term)
-            else:
-                suggestions = fuzzy_suggest(term, limit=3, cutoff=60)
-                if suggestions:
-                    session['pending_suggestions'] = suggestions
-                    session['pending_term'] = term
-                    s_list = ", ".join([f"{i+1}. {w}" for i, w in enumerate(suggestions)])
-                    return jsonify({"message": f"I didn't recognize '{term}'. Did you mean: {s_list}? Reply 1/2/3, type the correct word, or 'skip'."})
-                # otherwise ignore unknown token quietly
-        if added:
-            return jsonify({"message": f"Symptoms noted: {', '.join(added)}. Add more or type 'done'."})
-        return jsonify({"message": "Thanks. Add more symptoms or type 'done' to proceed."})
-
-    if stage == 'ask_name':
-        if text.lower() not in ('skip','none','n/a',''):
-            # only save name in session (not stored in DB per your Q2=A)
-            session['patient']['name'] = text
-        session['stage'] = 'ask_age'
-        return jsonify({"message": "Age? (optional) or type 'skip'."})
-
-    if stage == 'ask_age':
-        if text.lower() not in ('skip','none','n/a',''):
-            digits = ''.join(ch for ch in text if ch.isdigit())
-            if digits:
-                session['patient']['age'] = int(digits)
-        session['stage'] = 'ask_sex'
-        return jsonify({"message": "Sex (male/female/other) or type 'skip'."})
-
-    if stage == 'ask_sex':
-        if text.lower() not in ('skip','none','n/a',''):
-            session['patient']['sex'] = text.lower()
-        # now compute
-        symptoms_entered = session.get('symptoms', [])[:]
-        matched = BUNDLE.match_symptoms(symptoms_entered)
-        result = BUNDLE.predict(matched)
-        urgent = check_urgent(matched + symptoms_entered)
-        # save minimal assessment in DB (Q2=A)
-        db = DBSession()
-        ass = Assessment(
-            user_id=session.get('user_id'),
-            symptoms_entered="; ".join(symptoms_entered),
-            matched_symptoms="; ".join(matched),
-            predicted_condition=result.get('condition'),
-            probability=float(result.get('proba') or 0.0),
-            advice=result.get('advice'),
-            urgent_flag=bool(urgent),
-            external_sources=json.dumps({
-                "healthfinder": fetch_healthfinder(result.get('condition')),
-                "who": fetch_who_lookup(result.get('condition'))
-            })
-        )
-        db.add(ass); db.commit()
-        session['last_result'] = {
-            "assessment_id": ass.id,
-            "result": result,
-            "matched": matched
-        }
-        session['stage'] = 'done'
-        proba_txt = f" (confidence {result['proba']:.0%})" if result.get('proba') else ""
-        extras = ""
-        if result.get('precautions'):
-            extras = "\nPrecautions: " + ", ".join(result.get('precautions'))
-        urgent_msg = ""
-        if urgent:
-            urgent_msg = "\n\n⚠️ URGENT: Your symptoms include red-flag items. Seek emergency care immediately if severe."
-        return jsonify({"message": f"Based on your symptoms, possible: {result.get('condition')}{proba_txt}.\nAdvice: {result.get('advice')}{extras}{urgent_msg}\nYou can download a PDF or type 'start over'."})
-
-    # completed
-    return jsonify({"message": "Session complete. Click Start Over to run a new assessment."})
-
-
-# Quick form handler that mirrors form-based flow
-@app.route('/api/diagnose-form', methods=['POST'])
-def api_diagnose_form():
-    init_state()
-    data = request.json or {}
-    name = data.get('name') or ''
-    age = data.get('age') or ''
-    sex = data.get('sex') or ''
-    symptoms_raw = data.get('symptoms') or ''
     tokens = parse_tokens(symptoms_raw)
-    session['symptoms'] = tokens
-    session['patient'] = {}
-    if name:
-        session['patient']['name'] = name
-    if age:
-        digits = ''.join(ch for ch in str(age) if ch.isdigit())
-        if digits:
-            session['patient']['age'] = int(digits)
-    if sex:
-        session['patient']['sex'] = sex.lower()
-    # perform prediction like above
     matched = BUNDLE.match_symptoms(tokens)
     result = BUNDLE.predict(matched)
-    urgent = check_urgent(matched + tokens)
+
     db = DBSession()
     ass = Assessment(
-        user_id=session.get('user_id'),
+        user_id=session.get("user_id"),
         symptoms_entered="; ".join(tokens),
         matched_symptoms="; ".join(matched),
-        predicted_condition=result.get('condition'),
-        probability=float(result.get('proba') or 0.0),
-        advice=result.get('advice'),
-        urgent_flag=bool(urgent),
-        external_sources=json.dumps({
-            "healthfinder": fetch_healthfinder(result.get('condition')),
-            "who": fetch_who_lookup(result.get('condition'))
-        })
+        predicted_condition=result["condition"],
+        probability=result["prob"],
+        advice=result["description"]
     )
-    db.add(ass); db.commit()
-    session['last_result'] = {"assessment_id": ass.id, "result": result, "matched": matched}
-    session['stage'] = 'done'
-    proba_txt = f" (confidence {result['proba']:.0%})" if result.get('proba') else ""
-    urgent_msg = "\n\n⚠️ URGENT: Seek emergency care if symptoms severe." if urgent else ""
-    return jsonify({"message": f"Quick result: {result.get('condition')}{proba_txt}. Advice: {result.get('advice')}{urgent_msg}"})
+
+    db.add(ass)
+    db.commit()
+
+    session["last_result"] = result
+
+    return jsonify({
+        "condition": result["condition"],
+        "probability": result["prob"],
+        "description": result["description"],
+        "precautions": result["precautions"]
+    })
 
 
 # ---------------------------
-# Downloads & admin
+# PDF GENERATION
 # ---------------------------
-def make_pdf_simple(assessment: Assessment):
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    y = A4[1] - 20*mm
-    def line(t, step=7):
-        nonlocal y
-        c.setFont("Helvetica", 10); c.drawString(20*mm, y, t); y -= step*mm
-    line("HealthChero — Simple Report")
-    line(f"Assessment ID: {assessment.id}")
-    line(f"Date: {assessment.created_at.isoformat()}")
-    line("")
-    line("Symptoms Entered:")
-    for s in assessment.symptoms_entered.split(";"):
-        line(f" - {s.strip()}")
-    line("")
-    line(f"Predicted: {assessment.predicted_condition} (prob: {assessment.probability:.2f})")
-    line("Advice:")
-    for seg in (assessment.advice or "").split("\n"):
-        line(seg)
-    c.showPage(); c.save(); buf.seek(0)
-    return buf
-
-
-def make_pdf_professional(assessment: Assessment, patient_info: Dict[str, Any]):
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    y = A4[1] - 20*mm
-    def line(t, step=6):
-        nonlocal y
-        c.setFont("Helvetica", 11); c.drawString(20*mm, y, t); y -= step*mm
-    c.setFont("Helvetica-Bold", 16); line("HealthChero — Professional Medical Report", step=10)
-    c.setFont("Helvetica", 10)
-    line(f"Assessment ID: {assessment.id}")
-    line(f"Date: {assessment.created_at.isoformat()}")
-    line(f"Patient: {patient_info.get('name','Anonymous')}  Age: {patient_info.get('age','N/A')}  Sex: {patient_info.get('sex','N/A')}")
-    line("")
-    line("Symptoms Entered:")
-    for s in assessment.symptoms_entered.split(";"):
-        line(f" • {s.strip()}")
-    line("")
-    line(f"Predicted Condition: {assessment.predicted_condition} (prob: {assessment.probability:.2f})")
-    line("")
-    line("Advice and Precautions:")
-    for seg in (assessment.advice or "").split("\n"):
-        for chunk in [seg[i:i+100] for i in range(0, len(seg), 100)]:
-            line(chunk)
-    c.showPage(); c.save(); buf.seek(0)
-    return buf
-
-
 @app.route('/download_pdf')
 def download_pdf():
     last = session.get('last_result')
     if not last:
-        return "No assessment available", 400
-    aid = last.get('assessment_id')
-    style = (request.args.get('style') or 'simple').lower()
-    db = DBSession()
-    ass = db.query(Assessment).filter_by(id=aid).first()
-    if not ass:
-        return "Assessment not found", 404
-    patient_info = session.get('patient', {})
-    if style == 'professional':
-        buf = make_pdf_professional(ass, patient_info)
-        fname = f"healthchero_report_{ass.id}_professional.pdf"
-    else:
-        buf = make_pdf_simple(ass)
-        fname = f"healthchero_report_{ass.id}_simple.pdf"
-    return send_file(buf, as_attachment=True, download_name=fname, mimetype="application/pdf")
+        return "No result", 400
 
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
 
-@app.route('/download_csv')
-def download_csv():
-    key = request.args.get('admin_key') or ''
-    if not key or key != ADMIN_KEY:
-        return "Unauthorized", 403
-    # produce CSV of assessments
-    db = DBSession()
-    rows = db.query(Assessment).order_by(Assessment.created_at.desc()).all()
-    buf = io.StringIO()
-    writer = csv.writer(buf)
-    writer.writerow(["id","created_at","symptoms_entered","matched_symptoms","predicted_condition","probability","urgent_flag"])
-    for r in rows:
-        writer.writerow([r.id, r.created_at.isoformat(), r.symptoms_entered, r.matched_symptoms, r.predicted_condition, r.probability, r.urgent_flag])
+    y = A4[1] - 20 * mm
+    c.drawString(20 * mm, y, "HealthChero Medical Report")
+    y -= 15
+
+    c.drawString(20 * mm, y, f"Condition: {last['condition']}")
+    y -= 10
+    c.drawString(20 * mm, y, f"Probability: {last['prob']:.2f}")
+    y -= 10
+
+    c.drawString(20 * mm, y, "Description:")
+    y -= 10
+    for line in last['description'].split(". "):
+        c.drawString(20 * mm, y, line.strip())
+        y -= 7
+
+    y -= 10
+    c.drawString(20 * mm, y, "Precautions:")
+    y -= 10
+    for p in last['precautions']:
+        c.drawString(25 * mm, y, f"- {p}")
+        y -= 7
+
+    c.save()
     buf.seek(0)
-    return send_file(io.BytesIO(buf.getvalue().encode('utf-8')), mimetype='text/csv', as_attachment=True, download_name='assessments.csv')
+
+    return send_file(buf, as_attachment=True,
+                     download_name="health_report.pdf",
+                     mimetype="application/pdf")
 
 
 # ---------------------------
-# Health endpoint
+# Health
 # ---------------------------
-@app.route('/health')
+@app.route("/health")
 def health():
-    return jsonify({"status":"ok","model_loaded": bool(MODEL_DICT), "embeddings_loaded": bool(SYM_EMB)})
+    return jsonify({
+        "model": bool(disease_model),
+        "encoder": bool(label_encoder),
+        "embeddings": bool(symptom_embeddings)
+    })
 
 
 # ---------------------------
-# Run
+# RUN
 # ---------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), debug=False)
+    app.run(host="0.0.0.0",
+            port=int(os.environ.get("PORT", 10000)),
+            debug=False)
