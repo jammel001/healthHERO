@@ -125,31 +125,55 @@ class ModelBundle:
     def __init__(self):
         self.model = disease_model
         self.label_encoder = label_encoder
-        self.symptoms = list(symptom_encoder.classes_) if symptom_encoder is not None else []
+
+        # ✅ FIX: TfidfVectorizer uses get_feature_names_out()
+        if symptom_encoder is not None and hasattr(symptom_encoder, "get_feature_names_out"):
+            self.symptoms = symptom_encoder.get_feature_names_out().tolist()
+        else:
+            self.symptoms = []
 
         if symptom_embeddings is not None:
-            self.embedding_vocab = list(symptom_embeddings.files)
-            self.embedding_matrix = symptom_embeddings[self.embedding_vocab[0]]
+            self.embedding_keys = list(symptom_embeddings.files)
+            self.embedding_matrix = symptom_embeddings[self.embedding_keys[0]]
         else:
-            self.embedding_vocab = []
+            self.embedding_keys = []
             self.embedding_matrix = None
 
-    def predict(self, matched: List[str]) -> Dict[str, Any]:
-        if not matched or self.model is None:
-            return {"condition": "Unknown", "prob": 0, "advice": "Model unavailable"}
+    def match_symptoms(self, symptoms):
+        matched = []
+        for s in symptoms:
+            if s in self.symptoms:
+                matched.append(s)
+            else:
+                suggestions = process.extract(
+                    s, self.symptoms, limit=1, score_cutoff=80
+                )
+                if suggestions:
+                    matched.append(suggestions[0][0])
 
-        X = np.zeros((1, len(self.symptoms)))
-        for sym in matched:
-            if sym in self.symptoms:
-                idx = self.symptoms.index(sym)
-                X[0, idx] = 1
+        return list(set(matched))
+
+    def predict(self, matched):
+
+        if not matched or self.model is None:
+            return {
+                "condition": "Unknown",
+                "prob": 0,
+                "description": "Model unavailable",
+                "precautions": []
+            }
+
+        # ✅ Convert text symptoms using TF-IDF
+        symptom_text = " ".join(matched)
+        X = symptom_encoder.transform([symptom_text])
 
         probs = self.model.predict_proba(X)[0]
         idx = np.argmax(probs)
+
         label = self.label_encoder.inverse_transform([idx])[0]
         prob = float(probs[idx])
 
-        desc = disease_descriptions.get(label, "No description")
+        desc = disease_descriptions.get(label, "No description available")
         precautions = disease_precautions.get(label, [])
 
         return {
