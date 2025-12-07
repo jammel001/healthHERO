@@ -10,5 +10,5 @@ requests==2.31.0
 reportlab==4.1.0
 gunicorn==21.2.0
 python-dotenv==1.0.0
-scikit-learn
+scikit-learn==1.6.1
 
