@@ -122,7 +122,6 @@ symptom_embeddings = safe_numpy(SYM_EMB)
 # MODEL BUNDLE
 # ---------------------------
 class ModelBundle:
-    class ModelBundle:
     def __init__(self):
         self.model = disease_model
         self.label_encoder = label_encoder
