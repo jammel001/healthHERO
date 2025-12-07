@@ -505,18 +505,18 @@ GUIDE_HTML = """
 # ---------------------------
 # Routes: Auth & admin
 # ---------------------------
-@APP.route('/')
+@app.route('/')
 def home():
     init_state()
     return render_template_string(HOME_HTML)
 
 
-@APP.route('/guidelines')
+@app.route('/guidelines')
 def guidelines():
     return render_template_string(GUIDE_HTML)
 
 
-@APP.route('/api/signup', methods=['POST'])
+@app.route('/api/signup', methods=['POST'])
 def signup():
     data = request.json or {}
     email = (data.get('email') or '').strip().lower()
@@ -531,7 +531,7 @@ def signup():
     return jsonify({"ok": True, "message": "Account created. Please login."})
 
 
-@APP.route('/api/login', methods=['POST'])
+@app.route('/api/login', methods=['POST'])
 def login():
     data = request.json or {}
     email = (data.get('email') or '').strip().lower(); password = data.get('password') or ''
@@ -548,7 +548,7 @@ def login():
     return jsonify({"ok": True, "message": f"Logged in as {user.email}"})
 
 
-@APP.route('/api/logout', methods=['POST'])
+@app.route('/api/logout', methods=['POST'])
 def logout():
     session.pop('user_id', None)
     session.pop('user_email', None)
@@ -559,7 +559,7 @@ def logout():
 # ---------------------------
 # Conversation & form endpoints
 # ---------------------------
-@APP.route('/api/boot')
+@app.route('/api/boot')
 def api_boot():
     # initialize conversation once
     reset_state()
@@ -567,7 +567,7 @@ def api_boot():
     return jsonify({"message": "Hello! I'm HealthChero (B.Magaji). Describe your symptoms separated by commas, or use the Quick Form."})
 
 
-@APP.route('/api/restart', methods=['POST'])
+@app.route('/api/restart', methods=['POST'])
 def api_restart():
     reset_state()
     return jsonify({"ok": True})
@@ -577,7 +577,7 @@ def parse_tokens(text: str) -> List[str]:
     return [t.strip().lower() for t in text.replace(';', ',').split(',') if t.strip()]
 
 
-@APP.route('/api/message', methods=['POST'])
+@app.route('/api/message', methods=['POST'])
 def api_message():
     init_state()
     data = request.json or {}
@@ -702,7 +702,7 @@ def api_message():
 
 
 # Quick form handler that mirrors form-based flow
-@APP.route('/api/diagnose-form', methods=['POST'])
+@app.route('/api/diagnose-form', methods=['POST'])
 def api_diagnose_form():
     init_state()
     data = request.json or {}
@@ -800,7 +800,7 @@ def make_pdf_professional(assessment: Assessment, patient_info: Dict[str, Any]):
     return buf
 
 
-@APP.route('/download_pdf')
+@app.route('/download_pdf')
 def download_pdf():
     last = session.get('last_result')
     if not last:
@@ -821,7 +821,7 @@ def download_pdf():
     return send_file(buf, as_attachment=True, download_name=fname, mimetype="application/pdf")
 
 
-@APP.route('/download_csv')
+@app.route('/download_csv')
 def download_csv():
     key = request.args.get('admin_key') or ''
     if not key or key != ADMIN_KEY:
