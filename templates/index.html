@@ -92,26 +92,29 @@ function appendMessage(role, text) {
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-async function boot() {
-  const r = await fetch('/api/boot');
-  const j = await r.json();
-  appendMessage('ai', j.message);
-}
-
 async function sendMessage(text) {
   appendMessage('user', text);
   try {
-    const r = await fetch('/api/message', {
+    const r = await fetch('/api/diagnose', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({message: text})
     });
     const j = await r.json();
-    appendMessage('ai', j.message);
-    // if suggestion present, show additional note
-    if (j.ask_confirm && j.suggestion) {
-      appendMessage('ai','Did you mean: "' + j.suggestion + '"? Reply 1/2/3, type the word, or skip.');
+
+    // Show per-symptom explanations
+    if (j.explanations && j.explanations.length > 0) {
+      appendMessage('ai', 'Here are explanations for the symptoms you provided:');
+      j.explanations.forEach(exp => appendMessage('ai', exp));
     }
+
+    // Show disease prediction
+    appendMessage('ai', `Predicted Condition: ${j.condition} (Probability: ${j.probability.toFixed(2)})`);
+    appendMessage('ai', `Description: ${j.description}`);
+    if (j.precautions && j.precautions.length) {
+      appendMessage('ai', `Precautions: ${j.precautions.join(', ')}`);
+    }
+
   } catch (e) {
     appendMessage('ai', 'Network or server error. Try again later.');
   }
@@ -131,7 +134,6 @@ chatInput.addEventListener('keydown', (e) => {
 restartBtn.addEventListener('click', async () => {
   await fetch('/api/restart', {method:'POST'});
   chatWindow.innerHTML = '';
-  boot();
 });
 
 simplePdfBtn.addEventListener('click', () => {
@@ -167,9 +169,6 @@ document.getElementById('signupBtn').addEventListener('click', async () => {
   const j = await r.json();
   document.getElementById('authMsg').textContent = j.message || JSON.stringify(j);
 });
-
-// boot the assistant
-boot();
 </script>
 </body>
 </html>
