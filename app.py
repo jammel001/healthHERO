@@ -1,29 +1,20 @@
 import os
 import io
-import csv
-import json
-from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
+from datetime import datetime
+from typing import List
 
-from flask import (
-    Flask, request, jsonify, render_template, session, send_file
-)
+from flask import Flask, request, jsonify, render_template, session, send_file
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_session import Session
-from werkzeug.security import generate_password_hash, check_password_hash
 
-# DB
-from sqlalchemy import (
-    create_engine, Column, String, Integer, DateTime, Text, Float, Boolean, ForeignKey
-)
+from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Float, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
-# ML + utils
 import joblib
 import numpy as np
-from rapidfuzz import process, fuzz
-import requests
+from rapidfuzz import process
+
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
@@ -31,12 +22,10 @@ from reportlab.lib.units import mm
 # ---------------------------
 # Config
 # ---------------------------
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates')
 CORS(app)
 app.wsgi_app = ProxyFix(app.wsgi_app)
-
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-this-secret")
-
 app.config['SESSION_TYPE'] = "filesystem"
 app.config['SESSION_FILE_DIR'] = './flask_session'
 app.config['SESSION_PERMANENT'] = False
@@ -45,23 +34,47 @@ Session(app)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------------------
-# FILE PATHS
+# File Paths
 # ---------------------------
-MODEL_TABLES = os.path.join(BASE_DIR, "model_tables.pkl")
-SYM_EMB = os.path.join(BASE_DIR, "symptom_embeddings.npz")
-SYM_ENCODER = os.path.join(BASE_DIR, "symptom_encoder.pkl")
-SYM_EXPLANATION = os.path.join(BASE_DIR, "symptom_to_explanation.pkl")
-DISEASE_MODEL = os.path.join(BASE_DIR, "disease_model.pkl")
-DISEASE_DESC = os.path.join(BASE_DIR, "disease_to_description.pkl")
-DISEASE_PRECAUTIONS = os.path.join(BASE_DIR, "disease_to_precautions.pkl")
-LABEL_ENCODER = os.path.join(BASE_DIR, "label_encoder.pkl")
+FILES = {
+    "model_tables": "model_tables.pkl",
+    "symptom_embeddings": "symptom_embeddings.npz",
+    "symptom_encoder": "symptom_encoder.pkl",
+    "symptom_explanations": "symptom_to_explanation.pkl",
+    "disease_model": "disease_model.pkl",
+    "disease_descriptions": "disease_to_description.pkl",
+    "disease_precautions": "disease_to_precautions.pkl",
+    "label_encoder": "label_encoder.pkl"
+}
 
-DB_URL = os.environ.get("DATABASE_URL", "sqlite:///careguide.db")
-ADMIN_KEY = os.environ.get("ADMIN_KEY", "change-this-admin-key")
+def safe_load(path):
+    try:
+        return joblib.load(path)
+    except Exception as e:
+        print(f"ERROR loading {path}: {e}")
+        return None
+
+def safe_numpy(path):
+    try:
+        return np.load(path, allow_pickle=True)
+    except Exception as e:
+        print(f"ERROR loading {path}: {e}")
+        return None
+
+# Load files
+model_tables = safe_load(os.path.join(BASE_DIR, FILES["model_tables"]))
+symptom_embeddings = safe_numpy(os.path.join(BASE_DIR, FILES["symptom_embeddings"]))
+symptom_encoder = safe_load(os.path.join(BASE_DIR, FILES["symptom_encoder"]))
+symptom_explanations = safe_load(os.path.join(BASE_DIR, FILES["symptom_explanations"]))
+disease_model = safe_load(os.path.join(BASE_DIR, FILES["disease_model"]))
+disease_descriptions = safe_load(os.path.join(BASE_DIR, FILES["disease_descriptions"]))
+disease_precautions = safe_load(os.path.join(BASE_DIR, FILES["disease_precautions"]))
+label_encoder = safe_load(os.path.join(BASE_DIR, FILES["label_encoder"]))
 
 # ---------------------------
 # Database
 # ---------------------------
+DB_URL = os.environ.get("DATABASE_URL", "sqlite:///careguide.db")
 engine = create_engine(DB_URL, echo=False, future=True)
 Base = declarative_base()
 DBSession = sessionmaker(bind=engine)
@@ -74,7 +87,6 @@ class User(Base):
     display_name = Column(String(128))
     created_at = Column(DateTime, default=datetime.utcnow)
 
-
 class Assessment(Base):
     __tablename__ = "assessments"
     id = Column(Integer, primary_key=True)
@@ -85,144 +97,94 @@ class Assessment(Base):
     probability = Column(Float)
     advice = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
-
     user = relationship("User", backref="assessments")
 
 Base.metadata.create_all(engine)
 
 # ---------------------------
-# LOAD ALL MODEL FILES
-# ---------------------------
-def safe_load(path):
-    try:
-        return joblib.load(path)
-    except Exception as e:
-        print(f"ERROR loading {path}:", e)
-        return None
-
-
-def safe_numpy(path):
-    try:
-        return np.load(path, allow_pickle=True)
-    except Exception as e:
-        print(f"ERROR loading {path}:", e)
-        return None
-
-
-model_tables = safe_load(MODEL_TABLES)
-symptom_encoder = safe_load(SYM_ENCODER)
-symptom_explanations = safe_load(SYM_EXPLANATION)
-disease_model = safe_load(DISEASE_MODEL)
-disease_descriptions = safe_load(DISEASE_DESC)
-disease_precautions = safe_load(DISEASE_PRECAUTIONS)
-label_encoder = safe_load(LABEL_ENCODER)
-symptom_embeddings = safe_numpy(SYM_EMB)
-
-# ---------------------------
-# MODEL BUNDLE
+# Model Bundle
 # ---------------------------
 class ModelBundle:
     def __init__(self):
         self.model = disease_model
         self.label_encoder = label_encoder
+        self.symptom_encoder = symptom_encoder
+        self.symptoms = symptom_encoder.get_feature_names_out().tolist() if symptom_encoder else []
+        self.embedding_keys = list(symptom_embeddings.files) if symptom_embeddings else []
+        self.embedding_matrix = symptom_embeddings[self.embedding_keys[0]] if symptom_embeddings else None
 
-        # ✅ FIX: TfidfVectorizer uses get_feature_names_out()
-        if symptom_encoder is not None and hasattr(symptom_encoder, "get_feature_names_out"):
-            self.symptoms = symptom_encoder.get_feature_names_out().tolist()
-        else:
-            self.symptoms = []
-
-        if symptom_embeddings is not None:
-            self.embedding_keys = list(symptom_embeddings.files)
-            self.embedding_matrix = symptom_embeddings[self.embedding_keys[0]]
-        else:
-            self.embedding_keys = []
-            self.embedding_matrix = None
-
-    def match_symptoms(self, symptoms):
+    def match_symptoms(self, symptoms: List[str]) -> List[str]:
         matched = []
         for s in symptoms:
             if s in self.symptoms:
                 matched.append(s)
             else:
-                suggestions = process.extract(
-                    s, self.symptoms, limit=1, score_cutoff=80
-                )
+                suggestions = process.extract(s, self.symptoms, limit=1, score_cutoff=80)
                 if suggestions:
                     matched.append(suggestions[0][0])
-
         return list(set(matched))
 
-    def predict(self, matched):
-
+    def predict(self, matched: List[str]) -> dict:
         if not matched or self.model is None:
             return {
                 "condition": "Unknown",
-                "prob": 0,
+                "prob": 0.0,
                 "description": "Model unavailable",
                 "precautions": []
             }
-
-        # ✅ Convert text symptoms using TF-IDF
         symptom_text = " ".join(matched)
-        X = symptom_encoder.transform([symptom_text])
-
+        X = self.symptom_encoder.transform([symptom_text])
         probs = self.model.predict_proba(X)[0]
-        idx = np.argmax(probs)
-
+        idx = int(np.argmax(probs))
         label = self.label_encoder.inverse_transform([idx])[0]
         prob = float(probs[idx])
-
         desc = disease_descriptions.get(label, "No description available")
         precautions = disease_precautions.get(label, [])
-
-        return {
-            "condition": label,
-            "prob": prob,
-            "description": desc,
-            "precautions": precautions
-        }
+        return {"condition": label, "prob": prob, "description": desc, "precautions": precautions}
 
 BUNDLE = ModelBundle()
 
 # ---------------------------
-# Routes (HTML pages)
+# Utilities
+# ---------------------------
+def parse_tokens(text: str) -> List[str]:
+    return [t.strip().lower() for t in text.replace(';', ',').split(',') if t.strip()]
+
+# ---------------------------
+# Routes
 # ---------------------------
 @app.route("/")
 def home():
     return render_template("index.html")
 
-
 @app.route("/guidelines")
 def guidelines():
     return render_template("guidelines.html")
 
-
 @app.route("/result")
 def result_page():
     data = session.get("last_result")
-    if not data:
-        return render_template("result.html", result=None)
     return render_template("result.html", result=data)
 
-
 # ---------------------------
-# API
+# Diagnosis API
 # ---------------------------
-def parse_tokens(text: str) -> List[str]:
-    return [t.strip().lower() for t in text.replace(';', ',').split(',') if t.strip()]
-
-
 @app.route("/api/diagnose", methods=["POST"])
 def diagnose():
     data = request.json or {}
-    symptoms_raw = data.get("symptoms", "")
     name = data.get("name", "Anonymous")
+    tokens = parse_tokens(data.get("symptoms", ""))
 
-    tokens = parse_tokens(symptoms_raw)
     matched = BUNDLE.match_symptoms(tokens)
     result = BUNDLE.predict(matched)
 
+    # Per-symptom explanations
+    explanations = []
+    for s in matched:
+        expl = symptom_explanations.get(s, "No explanation available")
+        explanations.append(f"{s}: {expl}")
+
+    # Save to DB
     db = DBSession()
     ass = Assessment(
         user_id=session.get("user_id"),
@@ -232,64 +194,69 @@ def diagnose():
         probability=result["prob"],
         advice=result["description"]
     )
-
     db.add(ass)
     db.commit()
 
-    session["last_result"] = result
-
-    return jsonify({
+    session["last_result"] = {
         "condition": result["condition"],
         "probability": result["prob"],
         "description": result["description"],
-        "precautions": result["precautions"]
-    })
+        "precautions": result["precautions"],
+        "explanations": explanations
+    }
 
+    return jsonify(session["last_result"])
 
 # ---------------------------
-# PDF GENERATION
+# PDF Generation
 # ---------------------------
 @app.route('/download_pdf')
 def download_pdf():
     last = session.get('last_result')
     if not last:
-        return "No result", 400
+        return "No result available", 400
 
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
+    y = A4[1] - 20*mm
 
-    y = A4[1] - 20 * mm
-    c.drawString(20 * mm, y, "HealthChero Medical Report")
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(20*mm, y, "HealthChero Medical Report")
     y -= 15
 
-    c.drawString(20 * mm, y, f"Condition: {last['condition']}")
+    c.setFont("Helvetica", 12)
+    c.drawString(20*mm, y, f"Condition: {last['condition']}")
     y -= 10
-    c.drawString(20 * mm, y, f"Probability: {last['prob']:.2f}")
+    c.drawString(20*mm, y, f"Probability: {last['probability']:.2f}")
     y -= 10
-
-    c.drawString(20 * mm, y, "Description:")
+    c.drawString(20*mm, y, "Description:")
     y -= 10
     for line in last['description'].split(". "):
-        c.drawString(20 * mm, y, line.strip())
+        c.drawString(20*mm, y, line.strip())
         y -= 7
+    y -= 10
 
-    y -= 10
-    c.drawString(20 * mm, y, "Precautions:")
-    y -= 10
-    for p in last['precautions']:
-        c.drawString(25 * mm, y, f"- {p}")
-        y -= 7
+    if last.get('precautions'):
+        c.drawString(20*mm, y, "Precautions:")
+        y -= 10
+        for p in last['precautions']:
+            c.drawString(25*mm, y, f"- {p}")
+            y -= 7
+        y -= 10
+
+    if last.get('explanations'):
+        c.drawString(20*mm, y, "Symptom Explanations:")
+        y -= 10
+        for e in last['explanations']:
+            c.drawString(25*mm, y, f"- {e}")
+            y -= 7
 
     c.save()
     buf.seek(0)
-
-    return send_file(buf, as_attachment=True,
-                     download_name="health_report.pdf",
-                     mimetype="application/pdf")
-
+    return send_file(buf, as_attachment=True, download_name="health_report.pdf", mimetype="application/pdf")
 
 # ---------------------------
-# Health
+# Health Check
 # ---------------------------
 @app.route("/health")
 def health():
@@ -299,11 +266,8 @@ def health():
         "embeddings": bool(symptom_embeddings)
     })
 
-
 # ---------------------------
-# RUN
+# Run
 # ---------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0",
-            port=int(os.environ.get("PORT", 10000)),
-            debug=False)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), debug=False)
