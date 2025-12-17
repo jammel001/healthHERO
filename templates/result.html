@@ -12,62 +12,38 @@
         <p>Here’s what I’ve found based on your symptoms.</p>
     </div>
 
-    <div class="chat-box">
-        <div class="message bot-message">
-            Hello {{ name }}! Based on the symptoms you provided, here’s my analysis:
-        </div>
-
-        {% for exp in explanations %}
-            <div class="message bot-message">{{ exp }}</div>
-        {% endfor %}
-
-        {% if suggestions %}
-            <div class="message bot-message">
-                <strong>Suggestions:</strong>
-                <ul>
-                    {% for s in suggestions %}
-                        <li>{{ s }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-        {% endif %}
-
-        <div class="message bot-message">
-            <strong>Severity Level:</strong> {{ severity }}  
-            <br>
-            <em>{{ tip }}</em>
-        </div>
-    </div>
-
+    {% if result %}
     <div class="result-section">
-        <h2>Possible Conditions</h2>
-        {% for i in range(diseases|length) %}
         <div class="result-card">
-            <h3>{{ diseases[i] }}</h3>
-            <p><strong>Description:</strong> {{ descriptions[i] }}</p>
-            <p><strong>Precautions:</strong> {{ precautions[i] | join(', ') }}</p>
+            <h2>Predicted Condition: {{ result.condition }}</h2>
+            <p><strong>Probability:</strong> {{ result.probability | round(2) }}</p>
+            <p><strong>Description:</strong> {{ result.description }}</p>
+            <p><strong>Precautions:</strong></p>
+            <ul>
+                {% for p in result.precautions %}
+                    <li>{{ p }}</li>
+                {% endfor %}
+            </ul>
         </div>
-        {% endfor %}
     </div>
 
-    {% if symptom_details %}
-        <div class="result-section">
-            <h2>Symptom Details & Medical Guidelines</h2>
-            {% for item in symptom_details %}
-            <div class="result-card">
-                <h3>🩹 {{ item.symptom }}</h3>
-                <p><strong>Explanation:</strong> {{ item.local_explanation }}</p>
-                <p><strong>Treatment (Guideline):</strong> {{ item.treatment }}</p>
-                <p><strong>Prevention:</strong> {{ item.prevention }}</p>
-                <p><strong>Drug Purpose:</strong> {{ item.drug_purpose }}</p>
-                <p><strong>Drug Warnings:</strong> {{ item.drug_warnings }}</p>
-                <p><strong>Dosage:</strong> {{ item.drug_dosage }}</p>
-            </div>
+    {% if result.explanations %}
+    <div class="result-section">
+        <h2>Symptom Explanations</h2>
+        <ul>
+            {% for e in result.explanations %}
+                <li>{{ e }}</li>
             {% endfor %}
-        </div>
+        </ul>
+    </div>
     {% endif %}
 
-    <a href="{{ url_for('download', filename=pdf_file) }}" class="download-btn">📄 Download Prescription</a>
+    <div class="actions">
+        <a href="{{ url_for('download_pdf') }}" class="download-btn">📄 Download PDF Report</a>
+    </div>
+    {% else %}
+        <p>No diagnosis result available. Please go back and enter your symptoms.</p>
+    {% endif %}
 </div>
 </body>
 </html>
