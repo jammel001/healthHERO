@@ -109,41 +109,68 @@ class ModelBundle:
         self.model = disease_model
         self.label_encoder = label_encoder
         self.symptom_encoder = symptom_encoder
-        self.symptoms = symptom_encoder.get_feature_names_out().tolist() if symptom_encoder else []
-        self.embedding_keys = list(symptom_embeddings.files) if symptom_embeddings else []
-        self.embedding_matrix = symptom_embeddings[self.embedding_keys[0]] if symptom_embeddings else None
 
-    def match_symptoms(self, symptoms: List[str]) -> List[str]:
+        # TF-IDF symptom vocabulary
+        self.symptoms = (
+            symptom_encoder.get_feature_names_out().tolist()
+            if symptom_encoder else []
+        )
+
+        # Embeddings
+        if symptom_embeddings is not None:
+            self.embedding_keys = list(symptom_embeddings.files)
+            self.embedding_matrix = symptom_embeddings[self.embedding_keys[0]]
+        else:
+            self.embedding_keys = []
+            self.embedding_matrix = None
+
+    def match_symptoms(self, symptoms):
         matched = []
+
         for s in symptoms:
             if s in self.symptoms:
                 matched.append(s)
-            else:
-                suggestions = process.extract(s, self.symptoms, limit=1, score_cutoff=80)
-                if suggestions:
-                    matched.append(suggestions[0][0])
+                continue
+
+            # 1️⃣ Try fuzzy match
+            fuzzy = process.extract(s, self.symptoms, limit=1, score_cutoff=80)
+            if fuzzy:
+                matched.append(fuzzy[0][0])
+                continue
+
+            # 2️⃣ Try embedding similarity (fallback)
+            if self.embedding_matrix is not None and self.symptom_encoder is not None:
+                try:
+                    vec = self.symptom_encoder.transform([s]).toarray()
+                    sims = cosine_similarity(vec, self.embedding_matrix)[0]
+                    best_idx = int(np.argmax(sims))
+                    matched.append(self.symptoms[best_idx])
+                except Exception:
+                    pass
+
         return list(set(matched))
 
-    def predict(self, matched: List[str]) -> dict:
+    def predict_topk(self, matched, k=3):
         if not matched or self.model is None:
-            return {
-                "condition": "Unknown",
-                "prob": 0.0,
-                "description": "Model unavailable",
-                "precautions": []
-            }
-        symptom_text = " ".join(matched)
-        X = self.symptom_encoder.transform([symptom_text])
+            return []
+
+        text = " ".join(matched)
+        X = self.symptom_encoder.transform([text])
         probs = self.model.predict_proba(X)[0]
-        idx = int(np.argmax(probs))
-        label = self.label_encoder.inverse_transform([idx])[0]
-        prob = float(probs[idx])
-        desc = disease_descriptions.get(label, "No description available")
-        precautions = disease_precautions.get(label, [])
-        return {"condition": label, "prob": prob, "description": desc, "precautions": precautions}
 
-BUNDLE = ModelBundle()
+        topk_idx = np.argsort(probs)[::-1][:k]
 
+        results = []
+        for idx in topk_idx:
+            label = self.label_encoder.inverse_transform([idx])[0]
+            results.append({
+                "condition": label,
+                "probability": float(probs[idx]),
+                "description": disease_descriptions.get(label, ""),
+                "precautions": disease_precautions.get(label, [])
+            })
+
+        return results
 # ---------------------------
 # Utilities
 # ---------------------------
@@ -172,40 +199,38 @@ def result_page():
 @app.route("/api/diagnose", methods=["POST"])
 def diagnose():
     data = request.json or {}
-    name = data.get("name", "Anonymous")
     tokens = parse_tokens(data.get("symptoms", ""))
 
     matched = BUNDLE.match_symptoms(tokens)
-    result = BUNDLE.predict(matched)
+    predictions = BUNDLE.predict_topk(matched, k=3)
 
-    # Per-symptom explanations
+    # Symptom explanations
     explanations = []
     for s in matched:
-        expl = symptom_explanations.get(s, "No explanation available")
+        expl = symptom_explanations.get(s, "No explanation available.")
         explanations.append(f"{s}: {expl}")
 
-    # Save to DB
-    db = DBSession()
-    ass = Assessment(
-        user_id=session.get("user_id"),
-        symptoms_entered="; ".join(tokens),
-        matched_symptoms="; ".join(matched),
-        predicted_condition=result["condition"],
-        probability=result["prob"],
-        advice=result["description"]
-    )
-    db.add(ass)
-    db.commit()
+    if not predictions:
+        return jsonify({
+            "error": "Unable to make prediction",
+            "explanations": explanations
+        })
 
-    session["last_result"] = {
-        "condition": result["condition"],
-        "probability": result["prob"],
-        "description": result["description"],
-        "precautions": result["precautions"],
+    confidence = predictions[0]["probability"]
+    warning = None
+    if confidence < 0.35:
+        warning = "⚠️ Low confidence result. Please consult a healthcare professional."
+
+    response = {
+        "top_prediction": predictions[0],
+        "other_predictions": predictions[1:],
+        "confidence_warning": warning,
         "explanations": explanations
     }
 
-    return jsonify(session["last_result"])
+    session["last_result"] = response
+    return jsonify(response)
+
 
 # ---------------------------
 # PDF Generation
