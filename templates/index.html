@@ -102,22 +102,35 @@ async function sendMessage(text) {
     });
     const j = await r.json();
 
-    // Show per-symptom explanations
-    if (j.explanations && j.explanations.length > 0) {
-      appendMessage('ai', 'Here are explanations for the symptoms you provided:');
-      j.explanations.forEach(exp => appendMessage('ai', exp));
-    }
+   // Show symptom explanations
+if (j.explanations) {
+  appendMessage('ai', 'Symptom explanations:');
+  j.explanations.forEach(e => appendMessage('ai', e));
+}
 
-    // Show disease prediction
-    appendMessage('ai', `Predicted Condition: ${j.condition} (Probability: ${j.probability.toFixed(2)})`);
-    appendMessage('ai', `Description: ${j.description}`);
-    if (j.precautions && j.precautions.length) {
-      appendMessage('ai', `Precautions: ${j.precautions.join(', ')}`);
-    }
+// Show top prediction
+appendMessage(
+  'ai',
+  `Most likely condition: ${j.top_prediction.condition}
+   (Probability: ${j.top_prediction.probability.toFixed(2)})`
+);
 
-  } catch (e) {
-    appendMessage('ai', 'Network or server error. Try again later.');
-  }
+appendMessage('ai', j.top_prediction.description);
+
+// Warning
+if (j.confidence_warning) {
+  appendMessage('ai', j.confidence_warning);
+}
+
+// Other possibilities
+if (j.other_predictions && j.other_predictions.length > 0) {
+  appendMessage('ai', 'Other possible conditions:');
+  j.other_predictions.forEach(p => {
+    appendMessage(
+      'ai',
+      `${p.condition} (${p.probability.toFixed(2)})`
+    );
+  });
 }
 
 sendBtn.addEventListener('click', () => {
@@ -172,3 +185,4 @@ document.getElementById('signupBtn').addEventListener('click', async () => {
 </script>
 </body>
 </html>
+
