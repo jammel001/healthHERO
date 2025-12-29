@@ -285,11 +285,7 @@ def download_pdf():
 # ---------------------------
 @app.route("/health")
 def health():
-    return jsonify({
-        "model": bool(disease_model),
-        "encoder": bool(label_encoder),
-        "embeddings": bool(symptom_embeddings)
-    })
+    return jsonify({"status":"ok"}), 200
 
 # ---------------------------
 # Run
