@@ -8,120 +8,75 @@
 </head>
 
 <body>
-  <div class="page">
+<div class="page">
 
-    <!-- Header -->
-    <header class="topbar">
-      <div class="brand">
-        <div class="logo">BM</div>
-        <div class="brand-text">
-          <h1>B. Magaji — HealthChero</h1>
-          <p class="muted">
-            Built by Bara'u Magaji &amp; team — Chat or Quick Form
-          </p>
+  <!-- Header -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">BM</div>
+      <div class="brand-text">
+        <h1>B. Magaji — HealthChero</h1>
+        <p class="muted">Built by Bara'u Magaji &amp; team</p>
+      </div>
+    </div>
+
+    <nav class="top-actions">
+      <a class="link" href="/guidelines" target="_blank">Guidelines</a>
+      <button id="restartBtn" class="btn small">Start Over</button>
+    </nav>
+  </header>
+
+  <!-- Main -->
+  <main class="container">
+    <section class="left">
+
+      <div class="card chatcard">
+        <div id="chatWindow" class="chat-window"></div>
+
+        <div class="controls">
+          <input id="chatInput"
+                 placeholder="Type your message here and press Enter…">
+          <button id="sendBtn" class="btn">Send</button>
+        </div>
+
+        <div class="hint">
+          This assistant provides medical guidance, not diagnosis.
         </div>
       </div>
 
-      <nav class="top-actions">
-        <a class="link" href="/guidelines" target="_blank">Guidelines</a>
-        <button id="restartBtn" class="btn small">Start Over</button>
-      </nav>
-    </header>
-
-    <!-- Main Content -->
-    <main class="container">
-
-      <!-- Left Section -->
-      <section class="left">
-
-        <!-- Chat Card -->
-        <div class="card chatcard">
-          <div id="chatWindow" class="chat-window"></div>
-
-          <div class="controls">
-            <input
-              id="chatInput"
-              placeholder="Describe how you feel (e.g., fever, sore throat). Press Enter to send."
-            >
-            <button id="sendBtn" class="btn">Send</button>
-          </div>
-
-          <div class="hint">
-            <span>Tip:</span>
-            Enter multiple symptoms separated by commas. When finished, type
-            <strong>done</strong> or use the Quick Form.
-          </div>
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="card actions">
-          <button id="simplePdf" class="btn">Download Simple PDF</button>
-          <button id="profPdf" class="btn">Download Professional PDF</button>
-          <button id="adminCsv" class="btn small">Admin: Download CSV</button>
-        </div>
-
-      </section>
-
-      <!-- Right Section -->
-      <aside class="right">
-
-        <!-- Login Card -->
-        <div class="card login">
-          <h3>Login (Optional)</h3>
-
-          <input id="li_email" type="email" placeholder="Email">
-          <input id="li_pass" type="password" placeholder="Password">
-
-          <div class="row">
-            <button id="loginBtn" class="btn small">Login</button>
-            <button id="signupBtn" class="btn small ghost">Sign Up</button>
-          </div>
-
-          <div id="authMsg" class="muted small"></div>
-        </div>
-
-        <!-- Info Card -->
-        <div class="card info">
-          <h4>How It Works</h4>
-          <ol>
-            <li>Describe your symptoms (comma-separated).</li>
-            <li>Review suggested symptom matches if provided.</li>
-            <li>Optionally provide your name, age, and sex.</li>
-            <li>Download a PDF summary when ready.</li>
-          </ol>
-
-          <p class="muted small">
-            This tool provides informational guidance only and does not replace
-            professional medical diagnosis.
-          </p>
-        </div>
-
-      </aside>
-
-    </main>
-
-    <!-- Footer -->
-    <footer class="footer">
-      <div>
-        Contact:
-        <a href="mailto:admin@healthchero.com">admin@healthchero.com</a>
+      <div class="card actions">
+        <button id="simplePdf" class="btn">Download PDF</button>
       </div>
-      <div class="muted small">
-        Admin-key protected endpoints. Do not share publicly.
-      </div>
-    </footer>
 
-  </div>
-</body>
-</html>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div>
+      Contact:
+      <a href="mailto:admin@healthchero.com">admin@healthchero.com</a>
+    </div>
+  </footer>
+
+</div>
 
 <script>
+/* ======================
+   ELEMENTS
+====================== */
 const chatWindow = document.getElementById('chatWindow');
-const chatInput = document.getElementById('chatInput');
-const sendBtn = document.getElementById('sendBtn');
+const chatInput  = document.getElementById('chatInput');
+const sendBtn    = document.getElementById('sendBtn');
 const restartBtn = document.getElementById('restartBtn');
-const simplePdfBtn = document.getElementById('simplePdf');
 
+/* ======================
+   STATE
+====================== */
+let conversationStarted = false;
+
+/* ======================
+   UI HELPERS
+====================== */
 function appendMessage(role, text) {
   const div = document.createElement('div');
   div.className = 'msg ' + role;
@@ -130,73 +85,85 @@ function appendMessage(role, text) {
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
+function renderOptions(options) {
+  const box = document.createElement('div');
+  box.className = 'options';
+
+  options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className = 'btn small';
+    btn.textContent = opt;
+    btn.onclick = () => sendMessage(opt.toLowerCase());
+    box.appendChild(btn);
+  });
+
+  chatWindow.appendChild(box);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+/* ======================
+   CORE LOGIC
+====================== */
 async function sendMessage(text) {
+  if (!text) return;
+
   appendMessage('user', text);
+  chatInput.value = '';
+
+  const payload = conversationStarted
+    ? { reply: text }
+    : { symptoms: text };
+
+  conversationStarted = true;
 
   try {
-    const r = await fetch('/api/diagnose', {
+    const res = await fetch('/api/diagnose', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ symptoms: text }) // ✅ FIXED
+      body: JSON.stringify(payload)
     });
 
-    const j = await r.json();
+    const data = await res.json();
 
-    if (j.error) {
-      appendMessage('ai', j.error);
-      return;
-    }
+    if (data.text) appendMessage('ai', data.text);
+    if (data.items) data.items.forEach(i => appendMessage('ai', i));
+    if (data.advice) appendMessage('ai', data.advice);
+    if (data.disclaimer) appendMessage('ai', data.disclaimer);
+    if (data.options) renderOptions(data.options);
 
-    if (j.explanations) {
-      appendMessage('ai', 'Symptom explanations:');
-      j.explanations.forEach(e => appendMessage('ai', e));
-    }
-
-    const top = j.top_prediction;
-    appendMessage(
-      'ai',
-      `Most likely condition: ${top.condition} (Probability: ${top.probability.toFixed(2)})`
-    );
-
-    appendMessage('ai', top.description || 'No description available.');
-
-    if (j.confidence_warning) {
-      appendMessage('ai', j.confidence_warning);
-    }
-
-    if (j.other_predictions?.length) {
-      appendMessage('ai', 'Other possible conditions:');
-      j.other_predictions.forEach(p => {
-        appendMessage('ai', `${p.condition} (${p.probability.toFixed(2)})`);
-      });
-    }
-
-  } catch (err) {
-    appendMessage('ai', 'Server error. Please try again later.');
-    console.error(err);
+  } catch (e) {
+    appendMessage('ai', '⚠️ Unable to reach server. Please try again.');
   }
 }
 
-sendBtn.addEventListener('click', () => {
-  const v = chatInput.value.trim();
-  if (!v) return;
-  sendMessage(v);
-  chatInput.value = '';
+/* ======================
+   EVENTS
+====================== */
+sendBtn.onclick = () => sendMessage(chatInput.value.trim());
+
+chatInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendBtn.click();
 });
 
-chatInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    sendBtn.click();
-  }
-});
-
-restartBtn.addEventListener('click', () => {
+restartBtn.onclick = () => {
   chatWindow.innerHTML = '';
-});
+  conversationStarted = false;
+  greetUser();
+};
 
-simplePdfBtn.addEventListener('click', () => {
-  window.location.href = '/download_pdf';
-});
+/* ======================
+   INITIAL GREETING
+====================== */
+function greetUser() {
+  appendMessage(
+    'ai',
+    'Hello 👋 I am HealthChero, your virtual health assistant. ' +
+    'Please describe the symptoms you are experiencing.'
+  );
+}
+
+greetUser();
 </script>
 
+</body>
+</html>
