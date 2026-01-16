@@ -1,3 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>B. Magaji — HealthChero</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+  <div class="page">
+
+    <!-- Header -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">BM</div>
+        <div class="brand-text">
+          <h1>B. Magaji — HealthChero</h1>
+          <p class="muted">
+            Built by Bara'u Magaji &amp; team — Chat or Quick Form
+          </p>
+        </div>
+      </div>
+
+      <nav class="top-actions">
+        <a class="link" href="/guidelines" target="_blank">Guidelines</a>
+        <button id="restartBtn" class="btn small">Start Over</button>
+      </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+
+      <!-- Left Section -->
+      <section class="left">
+
+        <!-- Chat Card -->
+        <div class="card chatcard">
+          <div id="chatWindow" class="chat-window"></div>
+
+          <div class="controls">
+            <input
+              id="chatInput"
+              placeholder="Describe how you feel (e.g., fever, sore throat). Press Enter to send."
+            >
+            <button id="sendBtn" class="btn">Send</button>
+          </div>
+
+          <div class="hint">
+            <span>Tip:</span>
+            Enter multiple symptoms separated by commas. When finished, type
+            <strong>done</strong> or use the Quick Form.
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="card actions">
+          <button id="simplePdf" class="btn">Download Simple PDF</button>
+          <button id="profPdf" class="btn">Download Professional PDF</button>
+          <button id="adminCsv" class="btn small">Admin: Download CSV</button>
+        </div>
+
+      </section>
+
+      <!-- Right Section -->
+      <aside class="right">
+
+        <!-- Login Card -->
+        <div class="card login">
+          <h3>Login (Optional)</h3>
+
+          <input id="li_email" type="email" placeholder="Email">
+          <input id="li_pass" type="password" placeholder="Password">
+
+          <div class="row">
+            <button id="loginBtn" class="btn small">Login</button>
+            <button id="signupBtn" class="btn small ghost">Sign Up</button>
+          </div>
+
+          <div id="authMsg" class="muted small"></div>
+        </div>
+
+        <!-- Info Card -->
+        <div class="card info">
+          <h4>How It Works</h4>
+          <ol>
+            <li>Describe your symptoms (comma-separated).</li>
+            <li>Review suggested symptom matches if provided.</li>
+            <li>Optionally provide your name, age, and sex.</li>
+            <li>Download a PDF summary when ready.</li>
+          </ol>
+
+          <p class="muted small">
+            This tool provides informational guidance only and does not replace
+            professional medical diagnosis.
+          </p>
+        </div>
+
+      </aside>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div>
+        Contact:
+        <a href="mailto:admin@healthchero.com">admin@healthchero.com</a>
+      </div>
+      <div class="muted small">
+        Admin-key protected endpoints. Do not share publicly.
+      </div>
+    </footer>
+
+  </div>
+</body>
+</html>
+
 <script>
 const chatWindow = document.getElementById('chatWindow');
 const chatInput = document.getElementById('chatInput');
@@ -82,3 +199,4 @@ simplePdfBtn.addEventListener('click', () => {
   window.location.href = '/download_pdf';
 });
 </script>
+
