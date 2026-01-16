@@ -1,88 +1,9 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>B.Magaji — HealthChero</title>
-  <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-  <div class="page">
-    <header class="topbar">
-      <div class="brand">
-        <div class="logo">BM</div>
-        <div class="brand-text">
-          <h1> B.Magaji — HealthChero</h1>
-          <p class="muted">Built by Bara'u Magaji &amp; team — Chat or Quick Form</p>
-        </div>
-      </div>
-      <nav class="top-actions">
-        <a class="link" href="/guidelines" target="_blank">Guidelines</a>
-        <button id="restartBtn" class="btn small">Start Over</button>
-      </nav>
-    </header>
-
-    <main class="container">
-      <section class="left">
-        <div class="card chatcard">
-          <div id="chatWindow" class="chat-window"></div>
-
-          <div class="controls">
-            <input id="chatInput" placeholder="Describe how you feel (e.g., fever, sore throat). Press Enter to send." />
-            <button id="sendBtn" class="btn">Send</button>
-          </div>
-
-          <div class="hint">
-            <span>Tip:</span> You can type multiple symptoms separated by commas. When finished type <strong>done</strong> or use the Quick Form.
-          </div>
-        </div>
-
-        <div class="card actions">
-          <button id="simplePdf" class="btn">Download Simple PDF</button>
-          <button id="profPdf" class="btn">Download Professional PDF</button>
-          <button id="adminCsv" class="btn small">Admin: Download CSV</button>
-        </div>
-      </section>
-
-      <aside class="right">
-        <div class="card login">
-          <h3>Login (optional)</h3>
-          <input id="li_email" placeholder="Email" />
-          <input id="li_pass" placeholder="Password" type="password" />
-          <div class="row">
-            <button id="loginBtn" class="btn small">Login</button>
-            <button id="signupBtn" class="btn small ghost">Sign up</button>
-          </div>
-          <div id="authMsg" class="muted small"></div>
-        </div>
-
-        <div class="card info">
-          <h4>How it works</h4>
-          <ol>
-            <li>Tell the assistant your symptoms (comma separated).</li>
-            <li>Confirm suggested matches if shown.</li>
-            <li>Provide optional name/age/sex when prompted.</li>
-            <li>Download a PDF summary when ready.</li>
-          </ol>
-          <p class="muted small">This tool provides informational guidance only and is not a medical diagnosis.</p>
-        </div>
-      </aside>
-    </main>
-
-    <footer class="footer">
-      <div>Contact: <a href="mailto:admin@healthchero.com">admin@healthchero.com</a></div>
-      <div class="muted small">Admin key protected endpoints. Do not share it publicly.</div>
-    </footer>
-  </div>
-
 <script>
 const chatWindow = document.getElementById('chatWindow');
 const chatInput = document.getElementById('chatInput');
 const sendBtn = document.getElementById('sendBtn');
 const restartBtn = document.getElementById('restartBtn');
 const simplePdfBtn = document.getElementById('simplePdf');
-const profPdfBtn = document.getElementById('profPdf');
-const adminCsvBtn = document.getElementById('adminCsv');
 
 function appendMessage(role, text) {
   const div = document.createElement('div');
@@ -94,43 +15,49 @@ function appendMessage(role, text) {
 
 async function sendMessage(text) {
   appendMessage('user', text);
+
   try {
     const r = await fetch('/api/diagnose', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({message: text})
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symptoms: text }) // ✅ FIXED
     });
+
     const j = await r.json();
 
-   // Show symptom explanations
-if (j.explanations) {
-  appendMessage('ai', 'Symptom explanations:');
-  j.explanations.forEach(e => appendMessage('ai', e));
-}
+    if (j.error) {
+      appendMessage('ai', j.error);
+      return;
+    }
 
-// Show top prediction
-appendMessage(
-  'ai',
-  `Most likely condition: ${j.top_prediction.condition}
-   (Probability: ${j.top_prediction.probability.toFixed(2)})`
-);
+    if (j.explanations) {
+      appendMessage('ai', 'Symptom explanations:');
+      j.explanations.forEach(e => appendMessage('ai', e));
+    }
 
-appendMessage('ai', j.top_prediction.description);
-
-// Warning
-if (j.confidence_warning) {
-  appendMessage('ai', j.confidence_warning);
-}
-
-// Other possibilities
-if (j.other_predictions && j.other_predictions.length > 0) {
-  appendMessage('ai', 'Other possible conditions:');
-  j.other_predictions.forEach(p => {
+    const top = j.top_prediction;
     appendMessage(
       'ai',
-      `${p.condition} (${p.probability.toFixed(2)})`
+      `Most likely condition: ${top.condition} (Probability: ${top.probability.toFixed(2)})`
     );
-  });
+
+    appendMessage('ai', top.description || 'No description available.');
+
+    if (j.confidence_warning) {
+      appendMessage('ai', j.confidence_warning);
+    }
+
+    if (j.other_predictions?.length) {
+      appendMessage('ai', 'Other possible conditions:');
+      j.other_predictions.forEach(p => {
+        appendMessage('ai', `${p.condition} (${p.probability.toFixed(2)})`);
+      });
+    }
+
+  } catch (err) {
+    appendMessage('ai', 'Server error. Please try again later.');
+    console.error(err);
+  }
 }
 
 sendBtn.addEventListener('click', () => {
@@ -141,48 +68,17 @@ sendBtn.addEventListener('click', () => {
 });
 
 chatInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); sendBtn.click(); }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    sendBtn.click();
+  }
 });
 
-restartBtn.addEventListener('click', async () => {
-  await fetch('/api/restart', {method:'POST'});
+restartBtn.addEventListener('click', () => {
   chatWindow.innerHTML = '';
 });
 
 simplePdfBtn.addEventListener('click', () => {
-  window.location.href = '/download_pdf?style=simple';
-});
-profPdfBtn.addEventListener('click', () => {
-  window.location.href = '/download_pdf?style=professional';
-});
-adminCsvBtn.addEventListener('click', () => {
-  const key = prompt('Admin key (required):');
-  if (!key) return;
-  window.location.href = '/download_csv?admin_key=' + encodeURIComponent(key);
-});
-
-document.getElementById('loginBtn').addEventListener('click', async () => {
-  const email = document.getElementById('li_email').value;
-  const pass = document.getElementById('li_pass').value;
-  const r = await fetch('/api/login', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({email, password: pass})
-  });
-  const j = await r.json();
-  document.getElementById('authMsg').textContent = j.message || JSON.stringify(j);
-});
-
-document.getElementById('signupBtn').addEventListener('click', async () => {
-  const email = document.getElementById('li_email').value;
-  const pass = document.getElementById('li_pass').value;
-  const r = await fetch('/api/signup', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({email, password: pass})
-  });
-  const j = await r.json();
-  document.getElementById('authMsg').textContent = j.message || JSON.stringify(j);
+  window.location.href = '/download_pdf';
 });
 </script>
-</body>
-</html>
-
