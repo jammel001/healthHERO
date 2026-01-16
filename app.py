@@ -197,33 +197,150 @@ def result_page():
 @app.route("/api/diagnose", methods=["POST"])
 def diagnose():
     data = request.json or {}
-    tokens = parse_tokens(data.get("symptoms", ""))
+    user_input = (data.get("symptoms") or data.get("reply") or "").strip().lower()
 
-    matched = BUNDLE.match_symptoms(tokens)
-    predictions = BUNDLE.predict_topk(matched)
+    # Initialize conversation
+    if "stage" not in session:
+        session.clear()
+        session["stage"] = "GREETING"
 
-    explanations = [
-        f"{s}: {symptom_explanations.get(s, 'No explanation available.')}"
-        for s in matched
-    ]
+    stage = session["stage"]
 
-    if not predictions:
-        return jsonify({"error": "Prediction failed", "explanations": explanations}), 400
+    # -------------------------------
+    # GREETING
+    # -------------------------------
+    if stage == "GREETING":
+        session["stage"] = "ASK_SYMPTOMS"
+        return jsonify({
+            "type": "message",
+            "text": (
+                "Hello 👋 I’m HealthChero, your digital health assistant.\n\n"
+                "I’m here to help you understand your symptoms. "
+                "Please tell me how you are feeling today."
+            )
+        })
 
-    top = predictions[0]
-    warning = None
-    if top["probability"] < 0.35:
-        warning = "⚠️ Low confidence result. Consult a healthcare professional."
+    # -------------------------------
+    # ASK FOR SYMPTOMS
+    # -------------------------------
+    if stage == "ASK_SYMPTOMS":
+        tokens = parse_tokens(user_input)
 
-    result = {
-        "top_prediction": top,
-        "other_predictions": predictions[1:],
-        "confidence_warning": warning,
-        "explanations": explanations
-    }
+        if not tokens:
+            return jsonify({
+                "type": "message",
+                "text": "Please describe at least one symptom (e.g., fever, headache)."
+            })
 
-    session["last_result"] = result
-    return jsonify(result)
+        matched = BUNDLE.match_symptoms(tokens)
+        predictions = BUNDLE.predict_topk(matched)
+
+        session["symptoms"] = matched
+        session["predictions"] = predictions
+        session["stage"] = "ASK_SYMPTOM_EXPLANATION"
+
+        return jsonify({
+            "type": "question",
+            "text": (
+                "Thank you for sharing.\n\n"
+                "Would you like me to explain what these symptoms mean — "
+                "both in simple terms and medically?"
+            ),
+            "options": ["Yes", "No"]
+        })
+
+    # -------------------------------
+    # ASK TO EXPLAIN SYMPTOMS
+    # -------------------------------
+    if stage == "ASK_SYMPTOM_EXPLANATION":
+        if user_input.startswith("y"):
+            session["stage"] = "EXPLAIN_SYMPTOMS"
+        else:
+            session["stage"] = "SHOW_DISEASES"
+
+    # -------------------------------
+    # EXPLAIN SYMPTOMS
+    # -------------------------------
+    if stage == "EXPLAIN_SYMPTOMS":
+        explanations = []
+        for s in session["symptoms"]:
+            explanations.append({
+                "symptom": s,
+                "general": symptom_explanations.get(
+                    s, "This symptom reflects a change in how your body is functioning."
+                ),
+                "medical": f"Medically, {s} may indicate an underlying physiological or pathological condition."
+            })
+
+        session["stage"] = "SHOW_DISEASES"
+
+        return jsonify({
+            "type": "symptom_explanations",
+            "items": explanations
+        })
+
+    # -------------------------------
+    # SHOW POSSIBLE DISEASES
+    # -------------------------------
+    if stage == "SHOW_DISEASES":
+        session["stage"] = "ASK_DISEASE_EXPLANATION"
+        return jsonify({
+            "type": "conditions",
+            "items": [
+                {
+                    "condition": p["condition"],
+                    "probability": round(p["probability"], 2)
+                }
+                for p in session["predictions"]
+            ],
+            "text": "Based on your symptoms, these conditions are possible. Would you like detailed explanations?"
+        })
+
+    # -------------------------------
+    # ASK TO EXPLAIN DISEASES
+    # -------------------------------
+    if stage == "ASK_DISEASE_EXPLANATION":
+        if user_input.startswith("y"):
+            session["stage"] = "EXPLAIN_DISEASES"
+        else:
+            session["stage"] = "FINAL_ADVICE"
+
+    # -------------------------------
+    # EXPLAIN DISEASES
+    # -------------------------------
+    if stage == "EXPLAIN_DISEASES":
+        explanations = []
+        for p in session["predictions"]:
+            explanations.append({
+                "condition": p["condition"],
+                "description": p["description"] or "No detailed description available.",
+                "precautions": p["precautions"]
+            })
+
+        session["stage"] = "FINAL_ADVICE"
+
+        return jsonify({
+            "type": "disease_explanations",
+            "items": explanations
+        })
+
+    # -------------------------------
+    # FINAL ADVICE & DISCLAIMER
+    # -------------------------------
+    if stage == "FINAL_ADVICE":
+        session.clear()
+        return jsonify({
+            "type": "final",
+            "advice": (
+                "Based on the information you provided, please consider resting, "
+                "staying hydrated, and monitoring your symptoms closely.\n\n"
+                "If symptoms worsen, persist, or feel severe, seek medical care promptly."
+            ),
+            "disclaimer": (
+                "⚠️ Disclaimer: This information is for educational purposes only "
+                "and does not replace professional medical diagnosis or treatment."
+            )
+        })
 
 # ---------------------------
 # PDF Download
