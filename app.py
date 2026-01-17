@@ -153,41 +153,45 @@ def diagnose():
 
     stage = session.get("stage", "GREETING")
 
-    # ---------------- GREETING ----------------
-    if stage == "GREETING":
-        session["stage"] = "ASK_SYMPTOMS"
+  # -------------------------------
+# ASK SYMPTOMS
+# -------------------------------
+if stage == "ASK_SYMPTOMS":
+    tokens = parse_tokens(user_input)
+
+    if not tokens:
         return jsonify({
+            "type": "message",
+            "text": "Please tell me at least one symptom (for example: fever, headache, vomiting)."
+        })
+
+    matched = BUNDLE.match_symptoms(tokens)
+
+    # 🚑 Handle unrecognized / wrong symptoms
+    if not matched:
+        return jsonify({
+            "type": "message",
             "text": (
-                "Hello 👋 I’m HealthChero, your virtual health assistant.\n\n"
-                "Please describe the symptoms you are experiencing."
+                "I couldn’t clearly recognize those symptoms.\n\n"
+                "Please try simpler or common terms such as:\n"
+                "• fever\n• headache\n• cough\n• vomiting\n• body pain"
             )
         })
 
-    # ---------------- ASK SYMPTOMS ----------------
-    if stage == "ASK_SYMPTOMS":
-        tokens = [t.strip() for t in msg.replace(";", ",").split(",") if t.strip()]
-        matched, clarifications = BUNDLE.match_symptoms(tokens)
+    # Save matched symptoms
+    session["symptoms"] = matched
+    session["predictions"] = BUNDLE.predict_topk(matched)
+    session["stage"] = "ASK_SYMPTOM_EXPLANATION"
 
-        if clarifications:
-            session["pending_symptoms"] = matched
-            session["stage"] = "CLARIFY_SYMPTOMS"
-            return jsonify({
-                "text": "I want to be sure I understand you correctly:",
-                "items": clarifications,
-                "options": ["Yes", "No"]
-            })
-
-        session["symptoms"] = matched
-        session["predictions"] = BUNDLE.predict(matched)
-        session["stage"] = "ASK_SYMPTOM_EXPLANATION"
-
-        return jsonify({
-            "text": (
-                "Would you like me to explain these symptoms "
-                "in both general and medical terms?"
-            ),
-            "options": ["Yes", "No"]
-        })
+    return jsonify({
+        "type": "question",
+        "text": (
+            "Thank you for sharing.\n\n"
+            "Would you like me to explain these symptoms "
+            "in both general and medical terms?"
+        ),
+        "options": ["Yes", "No"]
+    })
 
     # ---------------- CLARIFY ----------------
     if stage == "CLARIFY_SYMPTOMS":
