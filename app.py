@@ -152,7 +152,7 @@ def diagnose():
         or ""
     ).strip().lower()
 
-    # Initialize conversation
+    # Initialize session
     if "stage" not in session:
         session.clear()
         session["stage"] = "GREETING"
@@ -240,75 +240,63 @@ def diagnose():
     # ASK SYMPTOM EXPLANATION
     # -------------------------------
     if stage == "ASK_SYMPTOM_EXPLANATION":
-        session["stage"] = "ASK_PREDICT_DISEASES"
-
         if user_input.startswith("y"):
+            session["stage"] = "ASK_PREDICT_DISEASES"
             return jsonify({
                 "text": "Here is a clear explanation of each symptom:",
                 "items": [
                     f"{s}: {symptom_explanations.get(s, 'General bodily symptom.')}"
                     for s in session["symptoms"]
                 ],
-                "options": ["Predict possible conditions", "Skip prediction"]
+                "options": ["Continue to possible conditions", "Stop here"]
             })
         else:
+            session["stage"] = "ASK_PREDICT_DISEASES"
             return jsonify({
-                "text": "Would you like me to predict the most likely conditions?",
+                "text": "Alright. Would you like me to predict the most likely conditions?",
                 "options": ["Yes", "No"]
             })
 
     # -------------------------------
-    # ASK TO PREDICT DISEASES
+    # SHOW DISEASES
     # -------------------------------
     if stage == "ASK_PREDICT_DISEASES":
-        if user_input.startswith("y") or "predict" in user_input:
-            session["stage"] = "SHOW_DISEASES"
-        else:
-            session["stage"] = "ASK_ANOTHER_PRESCRIPTION"
+        if user_input.startswith("y") or "continue" in user_input:
+            session["stage"] = "FINAL"
             return jsonify({
-                "text": "Alright. Would you like to assess another symptom?",
-                "options": ["Yes", "No"]
+                "text": "Based on your symptoms, these conditions are possible:",
+                "items": [
+                    f"{p['condition']} ({p['probability']})"
+                    for p in session.get("predictions", [])
+                ],
+                "advice": (
+                    "Please rest, stay hydrated, and monitor your symptoms."
+                ),
+                "disclaimer": (
+                    "⚠️ This is not a medical diagnosis. "
+                    "Seek professional care if symptoms worsen."
+                ),
+                "options": ["Check another condition", "End session"]
+            })
+        else:
+            session.clear()
+            return jsonify({
+                "text": "Okay. If you need help later, I’m always here"
             })
 
     # -------------------------------
-    # SHOW DISEASES + ADVICE
+    # FINAL / RESTART
     # -------------------------------
-    if stage == "SHOW_DISEASES":
-        session["stage"] = "ASK_ANOTHER_PRESCRIPTION"
+    if stage == "FINAL":
+        session.clear()
+        session["stage"] = "GREETING"
         return jsonify({
-            "text": "Based on your symptoms, these conditions are possible:",
-            "items": [
-                f"{p['condition']} ({p['probability']})"
-                for p in session.get("predictions", [])
-            ],
-            "advice": (
-                "Please rest, stay hydrated, eat light meals, "
-                "and monitor your symptoms carefully."
-            ),
-            "disclaimer": (
-                "⚠️ This is not a medical diagnosis. "
-                "Seek professional care if symptoms worsen."
-            ),
-            "options": ["Take another prescription", "End chat"]
+            "text": "Would you like to check another condition?",
+            "options": ["Yes", "No"]
         })
 
-    # -------------------------------
-    # ASK ANOTHER PRESCRIPTION
-    # -------------------------------
-    if stage == "ASK_ANOTHER_PRESCRIPTION":
-        if user_input.startswith("y") or "another" in user_input:
-            session.clear()
-            session["stage"] = "GREETING"
-            return jsonify({
-                "text": "Alright 👍 Let’s start again."
-            })
-        else:
-            session.clear()
-            return jsonify({
-                "text": "Thank you for using HealthChero 💚 Stay healthy!"
-            })
-
     return jsonify({"text": "I’m here whenever you’re ready."})
+
 
 
 # ---------------------------
