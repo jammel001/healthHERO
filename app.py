@@ -145,62 +145,90 @@ def home():
 @app.route("/api/diagnose", methods=["POST"])
 def diagnose():
     data = request.json or {}
-    msg = (data.get("message") or "").strip().lower()
 
-    # Restart
-    if msg == "__restart__":
+    user_input = (
+        data.get("symptoms")
+        or data.get("reply")
+        or ""
+    ).strip().lower()
+
+    # Initialize conversation
+    if "stage" not in session:
         session.clear()
+        session["stage"] = "GREETING"
 
-    stage = session.get("stage", "GREETING")
+    stage = session["stage"]
 
-  # -------------------------------
-# ASK SYMPTOMS
-# -------------------------------
-if stage == "ASK_SYMPTOMS":
-    tokens = parse_tokens(user_input)
-
-    if not tokens:
+    # -------------------------------
+    # GREETING
+    # -------------------------------
+    if stage == "GREETING":
+        session["stage"] = "ASK_SYMPTOMS"
         return jsonify({
-            "type": "message",
-            "text": "Please tell me at least one symptom (for example: fever, headache, vomiting)."
-        })
-
-    matched = BUNDLE.match_symptoms(tokens)
-
-    # 🚑 Handle unrecognized / wrong symptoms
-    if not matched:
-        return jsonify({
-            "type": "message",
             "text": (
-                "I couldn’t clearly recognize those symptoms.\n\n"
-                "Please try simpler or common terms such as:\n"
-                "• fever\n• headache\n• cough\n• vomiting\n• body pain"
+                "Hello 👋 I’m HealthChero, your virtual health assistant.\n\n"
+                "Please describe the symptoms you are experiencing."
             )
         })
 
-    # Save matched symptoms
-    session["symptoms"] = matched
-    session["predictions"] = BUNDLE.predict_topk(matched)
-    session["stage"] = "ASK_SYMPTOM_EXPLANATION"
+    # -------------------------------
+    # ASK SYMPTOMS
+    # -------------------------------
+    if stage == "ASK_SYMPTOMS":
+        tokens = [t.strip() for t in user_input.replace(";", ",").split(",") if t.strip()]
 
-    return jsonify({
-        "type": "question",
-        "text": (
-            "Thank you for sharing.\n\n"
-            "Would you like me to explain these symptoms "
-            "in both general and medical terms?"
-        ),
-        "options": ["Yes", "No"]
-    })
+        if not tokens:
+            return jsonify({
+                "text": (
+                    "Please tell me at least one symptom.\n"
+                    "Example: fever, headache, vomiting."
+                )
+            })
 
-    # ---------------- CLARIFY ----------------
+        matched, clarifications = BUNDLE.match_symptoms(tokens)
+
+        # 🧠 Handle wrong / unclear symptoms
+        if clarifications:
+            session["pending_symptoms"] = matched
+            session["stage"] = "CLARIFY_SYMPTOMS"
+            return jsonify({
+                "text": "I want to be sure I understand you correctly:",
+                "items": clarifications,
+                "options": ["Yes", "No"]
+            })
+
+        if not matched:
+            return jsonify({
+                "text": (
+                    "I couldn’t recognize those symptoms clearly.\n\n"
+                    "Try simpler terms like:\n"
+                    "• fever\n• headache\n• cough\n• vomiting\n• body pain"
+                )
+            })
+
+        session["symptoms"] = matched
+        session["predictions"] = BUNDLE.predict(matched)
+        session["stage"] = "ASK_SYMPTOM_EXPLANATION"
+
+        return jsonify({
+            "text": (
+                "Thank you for sharing.\n\n"
+                "Would you like me to explain these symptoms "
+                "in both general and medical terms?"
+            ),
+            "options": ["Yes", "No"]
+        })
+
+    # -------------------------------
+    # CLARIFY SYMPTOMS
+    # -------------------------------
     if stage == "CLARIFY_SYMPTOMS":
-        if msg.startswith("y"):
-            session["symptoms"] = session["pending_symptoms"]
+        if user_input.startswith("y"):
+            session["symptoms"] = session.pop("pending_symptoms", [])
             session["predictions"] = BUNDLE.predict(session["symptoms"])
             session["stage"] = "ASK_SYMPTOM_EXPLANATION"
             return jsonify({
-                "text": "Thank you for confirming. Shall I explain your symptoms?",
+                "text": "Thank you for confirming. Would you like explanations?",
                 "options": ["Yes", "No"]
             })
         else:
@@ -209,26 +237,31 @@ if stage == "ASK_SYMPTOMS":
                 "text": "Okay, please rephrase or describe your symptoms again."
             })
 
-    # ---------------- EXPLAIN SYMPTOMS ----------------
+    # -------------------------------
+    # ASK SYMPTOM EXPLANATION
+    # -------------------------------
     if stage == "ASK_SYMPTOM_EXPLANATION":
-        if msg.startswith("y"):
+        if user_input.startswith("y"):
             session["stage"] = "SHOW_DISEASES"
-            items = [
-                f"{s}: {symptom_explanations.get(s, 'General bodily symptom.')}"
-                for s in session["symptoms"]
-            ]
-            return jsonify({"items": items})
+            return jsonify({
+                "items": [
+                    f"{s}: {symptom_explanations.get(s, 'General bodily symptom.')}"
+                    for s in session["symptoms"]
+                ]
+            })
         else:
             session["stage"] = "SHOW_DISEASES"
 
-    # ---------------- SHOW DISEASES ----------------
+    # -------------------------------
+    # SHOW DISEASES + FINAL ADVICE
+    # -------------------------------
     if stage == "SHOW_DISEASES":
-        session["stage"] = "FINAL"
+        session.clear()
         return jsonify({
             "text": "Based on your symptoms, these conditions are possible:",
             "items": [
                 f"{p['condition']} ({p['probability']})"
-                for p in session["predictions"]
+                for p in session.get("predictions", [])
             ],
             "advice": (
                 "Please rest, stay hydrated, and monitor your symptoms."
@@ -240,6 +273,7 @@ if stage == "ASK_SYMPTOMS":
         })
 
     return jsonify({"text": "I’m here whenever you’re ready."})
+
 
 # ---------------------------
 # Run
