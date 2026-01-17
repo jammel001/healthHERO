@@ -2,7 +2,7 @@ import os
 import io
 from datetime import datetime
 from typing import List
-
+import re 
 from flask import Flask, request, jsonify, render_template, session, send_file
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -16,6 +16,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
+
+
+
+
 
 # ---------------------------
 # App Config
@@ -56,17 +60,66 @@ disease_precautions = safe_load(os.path.join(BASE_DIR, "disease_to_precautions.p
 label_encoder = safe_load(os.path.join(BASE_DIR, "label_encoder.pkl"))
 
 # ---------------------------
-# Symptom intelligence
 # ---------------------------
-SYMPTOM_ALIASES = {
-    "hot body": "fever",
-    "stomach headache": "abdominal pain",
-    "throwing up": "vomiting",
-    "weak body": "fatigue",
-    "loss of food taste": "loss of appetite"
-}
+# Phase 2 Symptom Phrase Mapping
+# ---------------------------
 
-KNOWN_SYMPTOMS = set(symptom_explanations.keys())
+CANONICAL_SYMPTOMS = [
+    "fever", "headache", "vomiting", "nausea",
+    "fatigue", "dizziness", "body pain",
+    "loss of appetite", "cough", "shortness of breath",
+    "chest pain", "diarrhea", "abdominal pain"
+]
+
+SYMPTOM_PHRASES = {
+    "fever": [
+        "hot body", "body is hot", "high temperature",
+        "feeling hot", "burning body", "chills"
+    ],
+
+    "headache": [
+        "head hurts", "pain in my head", "heavy head",
+        "pressure in head", "migraine"
+    ],
+
+    "vomiting": [
+        "throwing up", "throw up", "vomited",
+        "retching"
+    ],
+
+    "fatigue": [
+        "weak body", "feeling weak", "no strength",
+        "very tired"
+    ],
+
+    "loss of appetite": [
+        "not eating", "no appetite",
+        "food doesn’t interest me"
+    ],
+
+    "abdominal pain": [
+        "stomach pain", "pain in my stomach",
+        "stomach ache"
+    ]
+}
+def extract_symptoms_from_text(text: str) -> list:
+    text = text.lower()
+    detected = set()
+
+    # Phrase-level detection
+    for canonical, phrases in SYMPTOM_PHRASES.items():
+        for phrase in phrases:
+            if phrase in text:
+                detected.add(canonical)
+
+    # Token-level fallback
+    tokens = re.split(",|and|with|;|\\.", text)
+    for token in tokens:
+        token = token.strip()
+        if token in CANONICAL_SYMPTOMS:
+            detected.add(token)
+
+    return list(detected)
 
 # ---------------------------
 # Model Bundle
@@ -91,11 +144,11 @@ class ModelBundle:
         matched, clarifications = [], []
 
         for s in symptoms:
-            if s in SYMPTOM_ALIASES:
+            if s in SYMPTOM_PHRASES:
                 clarifications.append(
-                    f"When you said '{s}', did you mean '{SYMPTOM_ALIASES[s]}'?"
+                    f"When you said '{s}', did you mean '{SYMPTOM_PHRASES[s]}'?"
                 )
-                matched.append(SYMPTOM_ALIASES[s])
+                matched.append(SYMPTOM_PHRASES[s])
                 continue
 
             if s in self.symptoms:
