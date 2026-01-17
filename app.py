@@ -237,20 +237,26 @@ def diagnose():
                 "text": "Okay, please rephrase or describe your symptoms again."
             })
 
-    # -------------------------------
-    # ASK SYMPTOM EXPLANATION
-    # -------------------------------
-    if stage == "ASK_SYMPTOM_EXPLANATION":
-        if user_input.startswith("y"):
-            session["stage"] = "SHOW_DISEASES"
-            return jsonify({
-                "items": [
-                    f"{s}: {symptom_explanations.get(s, 'General bodily symptom.')}"
-                    for s in session["symptoms"]
-                ]
-            })
-        else:
-            session["stage"] = "SHOW_DISEASES"
+   # -------------------------------
+# ASK SYMPTOM EXPLANATION
+# -------------------------------
+if stage == "ASK_SYMPTOM_EXPLANATION":
+    if user_input.startswith("y"):
+        session["stage"] = "ASK_PREDICT_DISEASES"
+        return jsonify({
+            "text": "Here is a clear explanation of each symptom:",
+            "items": [
+                f"{s}: {symptom_explanations.get(s, 'General bodily symptom.')}"
+                for s in session["symptoms"]
+            ],
+            "options": ["Continue to possible conditions", "Stop here"]
+        })
+    else:
+        session["stage"] = "ASK_PREDICT_DISEASES"
+        return jsonify({
+            "text": "Alright. Would you like me to predict the most likely conditions?",
+            "options": ["Yes", "No"]
+        })
 
     # -------------------------------
     # SHOW DISEASES + FINAL ADVICE
@@ -264,7 +270,7 @@ def diagnose():
                 for p in session.get("predictions", [])
             ],
             "advice": (
-                "Please rest, stay hydrated, and monitor your symptoms."
+                "Maintaining good health and well-being involves a combination of preventive medical care, nutritious eating, regular physical activity, and mental health management. Please rest, stay hydrated, and monitor your symptoms."
             ),
             "disclaimer": (
                 "⚠️ This is not a medical diagnosis. "
