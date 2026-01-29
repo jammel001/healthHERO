@@ -192,23 +192,22 @@ BUNDLE = ModelBundle()
 def home():
     return render_template("index.html")
 
-# ---------------------------
-# Diagnosis API
-# ---------------------------
 @app.route("/api/diagnose", methods=["POST"])
 def diagnose():
     data = request.json or {}
 
     user_input = (
-        data.get("symptoms")
+        data.get("message")
+        or data.get("symptoms")
         or data.get("reply")
         or ""
     ).strip().lower()
 
-    # Initialize session
+    # Initialize conversation
     if "stage" not in session:
         session.clear()
         session["stage"] = "GREETING"
+        session["patient"] = {}
 
     stage = session["stage"]
 
@@ -216,14 +215,85 @@ def diagnose():
     # GREETING
     # -------------------------------
     if stage == "GREETING":
-        session["stage"] = "ASK_SYMPTOMS"
+        session["stage"] = "ASK_CONSENT"
         return jsonify({
             "text": (
                 "Hello 👋 I’m HealthChero, your virtual health assistant.\n\n"
-                "Please describe the symptoms you are experiencing."
+                "I’ll ask a few questions to better understand how you feel.\n"
+                "⚠️ This is not a medical diagnosis.\n\n"
+                "Shall we continue?"
+            ),
+            "options": ["Yes", "No"]
+        })
+
+    # -------------------------------
+    # ASK CONSENT
+    # -------------------------------
+    if stage == "ASK_CONSENT":
+        if user_input.startswith("y"):
+            session["stage"] = "ASK_NAME"
+            return jsonify({"text": "Great 👍 What is your name?"})
+        else:
+            session.clear()
+            return jsonify({
+                "text": "No problem. If you need help later, I’m here."
+            })
+
+    # -------------------------------
+    # ASK NAME
+    # -------------------------------
+    if stage == "ASK_NAME":
+        if not user_input:
+            return jsonify({"text": "Please tell me your name."})
+
+        session["patient"]["name"] = user_input.title()
+        session["stage"] = "ASK_AGE"
+        return jsonify({
+            "text": f"Nice to meet you, {session['patient']['name']}.\n\nHow old are you?"
+        })
+
+    # -------------------------------
+    # ASK AGE
+    # -------------------------------
+    if stage == "ASK_AGE":
+        if not user_input.isdigit():
+            return jsonify({
+                "text": "Please enter your age in numbers (e.g., 25)."
+            })
+
+        age = int(user_input)
+        if age < 0 or age > 120:
+            return jsonify({"text": "Please enter a valid age."})
+
+        session["patient"]["age"] = age
+        session["stage"] = "ASK_GENDER"
+        return jsonify({
+            "text": "What is your gender?",
+            "options": ["Male", "Female", "Prefer not to say"]
+        })
+
+    # -------------------------------
+    # ASK GENDER
+    # -------------------------------
+    if stage == "ASK_GENDER":
+        if user_input not in ["male", "female", "prefer not to say"]:
+            return jsonify({
+                "text": "Please choose one option.",
+                "options": ["Male", "Female", "Prefer not to say"]
+            })
+
+        session["patient"]["gender"] = user_input
+        session["stage"] = "ASK_SYMPTOMS"
+
+        return jsonify({
+            "text": (
+                f"Thank you, {session['patient']['name']}.\n\n"
+                "How are you feeling today? "
+                "Please describe your symptoms in your own words."
             )
         })
 
+  
     # -------------------------------
     # ASK SYMPTOMS
     # -------------------------------
