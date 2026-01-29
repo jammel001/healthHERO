@@ -294,12 +294,15 @@ def home():
 @app.route("/api/diagnose", methods=["POST"])
 def diagnose():
     data = request.json or {}
+
     user_input = (
         data.get("message")
         or data.get("symptoms")
+        or data.get("reply")
         or ""
     ).strip().lower()
 
+    # Initialize conversation
     if "stage" not in session:
         session.clear()
         session["stage"] = "GREETING"
@@ -307,30 +310,41 @@ def diagnose():
 
     stage = session["stage"]
 
+    # -------------------------------
+    # GREETING
+    # -------------------------------
     if stage == "GREETING":
         session["stage"] = "ASK_CONSENT"
         return jsonify({
-            "text": "Hello 👋 I’m HealthChero. Shall we continue?",
+            "text": (
+                "Hello 👋 I’m HealthChero, your virtual health assistant.\n\n"
+                "I’ll ask a few questions to better understand how you feel.\n"
+                "⚠️ This is not a medical diagnosis.\n\n"
+                "Shall we continue?"
+            ),
             "options": ["Yes", "No"]
         })
 
-  if stage == "ASK_CONSENT":
-    if user_input in ["yes", "y", "ok", "okay", "continue"]:
-        session["stage"] = "ASK_NAME"
-        return jsonify({
-            "text": "Great 👍 What is your name?"
-        })
+    # -------------------------------
+    # ASK CONSENT
+    # -------------------------------
+    if stage == "ASK_CONSENT":
+        if user_input in ["yes", "y", "ok", "okay", "continue"]:
+            session["stage"] = "ASK_NAME"
+            return jsonify({
+                "text": "Great 👍 What is your name?"
+            })
 
-    if user_input in ["no", "n"]:
-        session.clear()
-        return jsonify({
-            "text": "No problem. If you need help later, I’m here."
-        })
+        if user_input in ["no", "n"]:
+            session.clear()
+            return jsonify({
+                "text": "No problem. If you need help later, I’m here."
+            })
 
-    return jsonify({
-        "text": "Please choose one option.",
-        "options": ["Yes", "No"]
-    })
+        return jsonify({
+            "text": "Please choose one option.",
+            "options": ["Yes", "No"]
+        })
 
     if stage == "ASK_NAME":
         session["patient"]["name"] = user_input.title()
