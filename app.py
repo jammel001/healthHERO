@@ -243,24 +243,30 @@ def extract_symptoms_from_text(text: str):
     extracted = set()
     clarifications = []
 
-    # Phrase-level detection
+    # 1️⃣ Phrase matching (multi-word phrases)
     for phrase, symptom in SYMPTOM_ALIASES.items():
         if phrase in text:
             extracted.add(symptom)
 
-    # Direct symptom keyword detection
-    for symptom in BUNDLE.symptoms:
-        if re.search(rf"\b{re.escape(symptom)}\b", text):
+    # 2️⃣ Direct canonical symptom matching
+    for symptom in CANONICAL_SYMPTOMS:
+        pattern = r"\b" + re.escape(symptom) + r"\b"
+        if re.search(pattern, text):
             extracted.add(symptom)
 
-    # Fuzzy fallback (single words)
+    # 3️⃣ Fuzzy matching (single words fallback)
     words = re.findall(r"[a-z]+", text)
     for word in words:
-        match = process.extractOne(word, BUNDLE.symptoms, score_cutoff=88)
+        match = process.extractOne(
+            word,
+            CANONICAL_SYMPTOMS,
+            score_cutoff=85
+        )
         if match and match[0] not in extracted:
             clarifications.append(
                 f"Did you mean '{match[0]}' instead of '{word}'?"
             )
+            extracted.add(match[0])
 
     return list(extracted), clarifications
 
