@@ -285,29 +285,19 @@ class ModelBundle:
             self.embedding_matrix = None
 
     def match_symptoms(self, symptoms):
-        matched, clarifications = [], []
+    matched = []
 
-        for s in symptoms:
-            if s in SYMPTOM_PHRASES:
-                clarifications.append(
-                    f"When you said '{s}', did you mean '{SYMPTOM_PHRASES[s]}'?"
-                )
-                matched.append(SYMPTOM_PHRASES[s])
-                continue
+    for s in symptoms:
+        if s in self.symptoms:
+            matched.append(s)
+            continue
 
-            if s in self.symptoms:
-                matched.append(s)
-                continue
+        fuzzy = process.extractOne(s, self.symptoms, score_cutoff=85)
+        if fuzzy:
+            matched.append(fuzzy[0])
 
-            fuzzy = process.extract(s, self.symptoms, limit=1, score_cutoff=80)
-            if fuzzy:
-                clarifications.append(
-                    f"Did you mean '{fuzzy[0][0]}' instead of '{s}'?"
-                )
-                matched.append(fuzzy[0][0])
-
-        return list(set(matched)), clarifications
-
+    return list(set(matched))
+    
     def predict(self, matched):
         if not matched or not self.model:
             return []
