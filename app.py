@@ -477,25 +477,43 @@ if normalized not in ["male", "female", "prefer not to say"]:
             })
 
     # -------------------------------
-    # ASK SYMPTOM EXPLANATION
+    # ASK SYMPTOMS
     # -------------------------------
-    if stage == "ASK_SYMPTOM_EXPLANATION":
-        if user_input.startswith("y"):
-            session["stage"] = "ASK_PREDICT_DISEASES"
+    if stage == "ASK_SYMPTOMS":
+        matched, clarifications = extract_symptoms_from_text(user_input)
+
+        if not matched:
             return jsonify({
-                "text": "Here is a clear explanation of each symptom:",
-                "items": [
-                    f"{s}: {symptom_explanations.get(s, 'General bodily symptom.')}"
-                    for s in session["symptoms"]
-                ],
-                "options": ["Continue to possible conditions", "Stop here"]
+                "text": (
+                    "I couldn’t clearly identify your symptoms.\n\n"
+                    "Please describe how you feel in your own words.\n"
+                    "Example:\n"
+                    "• I feel very weak and my head is aching\n"
+                    "• I vomited and my body is hot"
+                )
             })
-        else:
-            session["stage"] = "ASK_PREDICT_DISEASES"
+
+        if clarifications:
+            session["pending_symptoms"] = matched
+            session["stage"] = "CLARIFY_SYMPTOMS"
             return jsonify({
-                "text": "Alright. Would you like me to predict the most likely conditions?",
+                "text": "I want to be sure I understand you correctly:",
+                "items": clarifications,
                 "options": ["Yes", "No"]
             })
+
+        session["symptoms"] = matched
+        session["predictions"] = BUNDLE.predict(matched)
+        session["stage"] = "ASK_SYMPTOM_EXPLANATION"
+
+        return jsonify({
+            "text": (
+                "Thank you for explaining how you feel.\n\n"
+                "Would you like me to explain each symptom "
+                "in simple and medical terms?"
+            ),
+            "options": ["Yes", "No"]
+        })
 
     # -------------------------------
     # SHOW DISEASES
