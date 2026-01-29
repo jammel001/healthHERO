@@ -314,12 +314,23 @@ def diagnose():
             "options": ["Yes", "No"]
         })
 
-    if stage == "ASK_CONSENT":
-        if user_input.startswith("y"):
-            session["stage"] = "ASK_NAME"
-            return jsonify({"text": "Great 👍 What is your name?"})
+  if stage == "ASK_CONSENT":
+    if user_input in ["yes", "y", "ok", "okay", "continue"]:
+        session["stage"] = "ASK_NAME"
+        return jsonify({
+            "text": "Great 👍 What is your name?"
+        })
+
+    if user_input in ["no", "n"]:
         session.clear()
-        return jsonify({"text": "No problem. I’m here anytime."})
+        return jsonify({
+            "text": "No problem. If you need help later, I’m here."
+        })
+
+    return jsonify({
+        "text": "Please choose one option.",
+        "options": ["Yes", "No"]
+    })
 
     if stage == "ASK_NAME":
         session["patient"]["name"] = user_input.title()
