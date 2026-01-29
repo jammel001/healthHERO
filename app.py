@@ -1,25 +1,16 @@
 import os
-import io
+import re
 from datetime import datetime
 from typing import List
-import re 
-from flask import Flask, request, jsonify, render_template, session, send_file
-from flask_cors import CORS
-from werkzeug.middleware.proxy_fix import ProxyFix
-from flask_session import Session
 
 import joblib
 import numpy as np
 from rapidfuzz import process
-from sklearn.metrics.pairwise import cosine_similarity
 
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import mm
-
-
-
-
+from flask import Flask, request, jsonify, render_template, session
+from flask_cors import CORS
+from flask_session import Session
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ---------------------------
 # App Config
@@ -37,7 +28,7 @@ Session(app)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------------------
-# Load Models
+# Safe Loaders
 # ---------------------------
 def safe_load(path):
     try:
@@ -51,29 +42,30 @@ def safe_numpy(path):
     except Exception:
         return None
 
+# ---------------------------
+# Load Models
+# ---------------------------
 symptom_encoder = safe_load(os.path.join(BASE_DIR, "symptom_encoder.pkl"))
 symptom_embeddings = safe_numpy(os.path.join(BASE_DIR, "symptom_embeddings.npz"))
 symptom_explanations = safe_load(os.path.join(BASE_DIR, "symptom_to_explanation.pkl")) or {}
+
 disease_model = safe_load(os.path.join(BASE_DIR, "disease_model.pkl"))
 disease_descriptions = safe_load(os.path.join(BASE_DIR, "disease_to_description.pkl")) or {}
 disease_precautions = safe_load(os.path.join(BASE_DIR, "disease_to_precautions.pkl")) or {}
 label_encoder = safe_load(os.path.join(BASE_DIR, "label_encoder.pkl"))
 
-# ---------------------------
-# ---------------------------
-# Phase 2 Symptom Phrase Mapping
-# ---------------------------
-
+# =====================================================
+# Phase 2 — Symptom Phrase Mapping (✅ CORRECT LOCATION)
+# =====================================================
 CANONICAL_SYMPTOMS = [
-    "fever", "headache", "vomiting", "nausea",
-    "fatigue", "dizziness", "body pain",
-    "loss of appetite", "cough", "shortness of breath",
-    "chest pain", "diarrhea", "abdominal pain"
+    "fever", "headache", "vomiting", "nausea", "fatigue",
+    "dizziness", "body pain", "loss of appetite", "cough",
+    "shortness of breath", "chest pain", "diarrhea",
+    "abdominal pain", "sore throat", "insomnia"
 ]
 
-SYMPTOM_ALIASES = {
-
-    # =======================
+SYMPTOM_ALIASES = {    
+# =======================
     # FEVER / TEMPERATURE
     # =======================
     "hot body": "fever",
@@ -89,7 +81,6 @@ SYMPTOM_ALIASES = {
     "feverish": "fever",
     "chills and fever": "fever",
     "cold and hot": "fever",
-
     # =======================
     # HEADACHE
     # =======================
@@ -104,7 +95,6 @@ SYMPTOM_ALIASES = {
     "sharp head pain": "headache",
     "head pressure": "headache",
     "throbbing head": "headache",
-
     # =======================
     # VOMITING / NAUSEA
     # =======================
@@ -119,7 +109,6 @@ SYMPTOM_ALIASES = {
     "feel like vomiting": "vomiting",
     "feel like throwing up": "vomiting",
     "stomach upset and vomiting": "vomiting",
-
     # =======================
     # NAUSEA ONLY
     # =======================
@@ -127,7 +116,6 @@ SYMPTOM_ALIASES = {
     "feeling sick": "nausea",
     "queasy stomach": "nausea",
     "unsettled stomach": "nausea",
-
     # =======================
     # FATIGUE / WEAKNESS
     # =======================
@@ -141,7 +129,6 @@ SYMPTOM_ALIASES = {
     "low energy": "fatigue",
     "exhausted": "fatigue",
     "easily tired": "fatigue",
-
     # =======================
     # APPETITE
     # =======================
@@ -152,7 +139,6 @@ SYMPTOM_ALIASES = {
     "not eating well": "loss of appetite",
     "food does not interest me": "loss of appetite",
     "reduced appetite": "loss of appetite",
-
     # =======================
     # COUGH
     # =======================
@@ -162,7 +148,6 @@ SYMPTOM_ALIASES = {
     "coughing a lot": "cough",
     "coughing": "cough",
     "night cough": "cough",
-
     # =======================
     # CHEST
     # =======================
@@ -171,7 +156,6 @@ SYMPTOM_ALIASES = {
     "tight chest": "chest pain",
     "chest tightness": "chest pain",
     "burning chest": "chest pain",
-
     # =======================
     # BREATHING
     # =======================
@@ -180,7 +164,6 @@ SYMPTOM_ALIASES = {
     "hard to breathe": "shortness of breath",
     "breathing problem": "shortness of breath",
     "fast breathing": "shortness of breath",
-
     # =======================
     # BODY PAIN
     # =======================
@@ -191,7 +174,6 @@ SYMPTOM_ALIASES = {
     "muscle pain": "muscle pain",
     "joint pain": "joint pain",
     "bone pain": "joint pain",
-
     # =======================
     # ABDOMINAL / STOMACH
     # =======================
@@ -202,7 +184,6 @@ SYMPTOM_ALIASES = {
     "belly pain": "abdominal pain",
     "lower stomach pain": "abdominal pain",
     "upper stomach pain": "abdominal pain",
-
     # =======================
     # DIARRHEA
     # =======================
@@ -211,7 +192,6 @@ SYMPTOM_ALIASES = {
     "watery stool": "diarrhea",
     "frequent stool": "diarrhea",
     "diarrhoea": "diarrhea",
-
     # =======================
     # DIZZINESS
     # =======================
@@ -220,7 +200,6 @@ SYMPTOM_ALIASES = {
     "lightheaded": "dizziness",
     "head spinning": "dizziness",
     "about to faint": "dizziness",
-
     # =======================
     # SORE THROAT
     # =======================
@@ -228,7 +207,6 @@ SYMPTOM_ALIASES = {
     "throat pain": "sore throat",
     "pain when swallowing": "sore throat",
     "itchy throat": "sore throat",
-
     # =======================
     # SLEEP
     # =======================
@@ -237,38 +215,32 @@ SYMPTOM_ALIASES = {
     "poor sleep": "insomnia",
     "sleepless nights": "insomnia"
 }
+
 def extract_symptoms_from_text(text: str):
     text = text.lower()
     extracted = set()
     clarifications = []
-    # 1️⃣ Phrase matching (multi-word phrases)
+
     for phrase, symptom in SYMPTOM_ALIASES.items():
         if phrase in text:
             extracted.add(symptom)
-    # 2️⃣ Direct canonical symptom matching
+
     for symptom in CANONICAL_SYMPTOMS:
-        pattern = r"\b" + re.escape(symptom) + r"\b"
-        if re.search(pattern, text):
+        if re.search(rf"\b{re.escape(symptom)}\b", text):
             extracted.add(symptom)
-    # 3️⃣ Fuzzy matching (single words fallback)
+
     words = re.findall(r"[a-z]+", text)
     for word in words:
-        match = process.extractOne(
-            word,
-            CANONICAL_SYMPTOMS,
-            score_cutoff=85
-        )
+        match = process.extractOne(word, CANONICAL_SYMPTOMS, score_cutoff=85)
         if match and match[0] not in extracted:
-            clarifications.append(
-                f"Did you mean '{match[0]}' instead of '{word}'?"
-            )
+            clarifications.append(f"Did you mean '{match[0]}' instead of '{word}'?")
             extracted.add(match[0])
+
     return list(extracted), clarifications
 
-
-# ---------------------------
+# ===========================
 # Model Bundle
-# ---------------------------
+# ===========================
 class ModelBundle:
     def __init__(self):
         self.model = disease_model
@@ -280,31 +252,27 @@ class ModelBundle:
             if self.encoder else []
         )
 
-        if symptom_embeddings is not None:
-            self.embedding_matrix = symptom_embeddings[list(symptom_embeddings.files)[0]]
-        else:
-            self.embedding_matrix = None
     def match_symptoms(self, symptoms):
-    matched = []
-    for s in symptoms:
-        if s in self.symptoms:
-            matched.append(s)
-            continue
-        fuzzy = process.extractOne(s, self.symptoms, score_cutoff=85)
-        if fuzzy:
-            matched.append(fuzzy[0])
-    return list(set(matched))
-    
+        matched = []
+        for s in symptoms:
+            if s in self.symptoms:
+                matched.append(s)
+            else:
+                fuzzy = process.extractOne(s, self.symptoms, score_cutoff=85)
+                if fuzzy:
+                    matched.append(fuzzy[0])
+        return list(set(matched))
+
     def predict(self, matched):
         if not matched or not self.model:
             return []
 
         X = self.encoder.transform([" ".join(matched)])
         probs = self.model.predict_proba(X)[0]
-        idxs = np.argsort(probs)[::-1][:3]
+        top_idxs = np.argsort(probs)[::-1][:3]
 
         results = []
-        for i in idxs:
+        for i in top_idxs:
             label = self.label_encoder.inverse_transform([i])[0]
             results.append({
                 "condition": label,
@@ -315,246 +283,88 @@ class ModelBundle:
         return results
 
 BUNDLE = ModelBundle()
+
 # ---------------------------
 # Routes
 # ---------------------------
 @app.route("/")
 def home():
     return render_template("index.html")
+
 @app.route("/api/diagnose", methods=["POST"])
 def diagnose():
     data = request.json or {}
-  user_input = (
+    user_input = (
         data.get("message")
         or data.get("symptoms")
-        or data.get("reply")
         or ""
     ).strip().lower()
 
-    # Initialize conversation
     if "stage" not in session:
         session.clear()
         session["stage"] = "GREETING"
         session["patient"] = {}
+
     stage = session["stage"]
 
-    # -------------------------------
-    # GREETING
-    # -------------------------------
     if stage == "GREETING":
         session["stage"] = "ASK_CONSENT"
         return jsonify({
-            "text": (
-                "Hello 👋 I’m HealthChero, your virtual health assistant.\n\n"
-                "I’ll ask a few questions to better understand how you feel.\n"
-                "⚠️ This is not a medical diagnosis.\n\n"
-                "Shall we continue?"
-            ),
+            "text": "Hello 👋 I’m HealthChero. Shall we continue?",
             "options": ["Yes", "No"]
         })
 
-    # -------------------------------
-    # ASK CONSENT
-    # -------------------------------
     if stage == "ASK_CONSENT":
         if user_input.startswith("y"):
             session["stage"] = "ASK_NAME"
             return jsonify({"text": "Great 👍 What is your name?"})
-        else:
-            session.clear()
-            return jsonify({
-                "text": "No problem. If you need help later, I’m here."
-            })
+        session.clear()
+        return jsonify({"text": "No problem. I’m here anytime."})
 
-    # -------------------------------
-    # ASK NAME
-    # -------------------------------
     if stage == "ASK_NAME":
-        if not user_input:
-            return jsonify({"text": "Please tell me your name."})
-
         session["patient"]["name"] = user_input.title()
         session["stage"] = "ASK_AGE"
-        return jsonify({
-            "text": f"Nice to meet you, {session['patient']['name']}.\n\nHow old are you?"
-        })
+        return jsonify({"text": "How old are you?"})
 
-    # -------------------------------
-    # ASK AGE
-    # -------------------------------
     if stage == "ASK_AGE":
         if not user_input.isdigit():
-            return jsonify({
-                "text": "Please enter your age in numbers (e.g., 25)."
-            })
-
-        age = int(user_input)
-        if age < 0 or age > 120:
             return jsonify({"text": "Please enter a valid age."})
-
-        session["patient"]["age"] = age
+        session["patient"]["age"] = int(user_input)
         session["stage"] = "ASK_GENDER"
-        return jsonify({
-            "text": "What is your gender?",
-            "options": ["Male", "Female", "Prefer not to say"]
-        })
+        return jsonify({"text": "What is your gender?", "options": ["Male", "Female", "Prefer not to say"]})
 
-    # -------------------------------
-    # ASK GENDER
-    # -------------------------------
     if stage == "ASK_GENDER":
-        normalized = user_input.lower()
-if normalized not in ["male", "female", "prefer not to say"]:
-            return jsonify({
-                "text": "Please choose one option.",
-                "options": ["Male", "Female", "Prefer not to say"]
-            })
-
-        session["patient"]["gender"] = normalized
+        session["patient"]["gender"] = user_input
         session["stage"] = "ASK_SYMPTOMS"
-        return jsonify({
-            "text": (
-                f"Thank you, {session['patient']['name']}.\n\n"
-                "How are you feeling today? "
-                "Please describe your symptoms in your own words."
-            )
-        })
+        return jsonify({"text": "Please describe how you are feeling."})
 
-  
-    # -------------------------------
-    # ASK SYMPTOMS
-    # -------------------------------
-  if stage == "ASK_SYMPTOMS":
-    matched, clarifications = extract_symptoms_from_text(user_input)
-    if not matched:
-        return jsonify({
-            "text": (
-                "I couldn’t clearly identify your symptoms.\n\n"
-                "Please describe how you feel in your own words.\n"
-                "Example:\n"
-                "• I feel very weak and my head is aching\n"
-                "• I vomited and my body is hot"
-            )
-        })
-
-    if clarifications:
-        session["pending_symptoms"] = matched
-        session["stage"] = "CLARIFY_SYMPTOMS"
-        return jsonify({
-            "text": "I want to be sure I understand you correctly:",
-            "items": clarifications,
-            "options": ["Yes", "No"]
-        })
-
-    session["symptoms"] = matched
-    session["predictions"] = BUNDLE.predict(matched)
-    session["stage"] = "ASK_SYMPTOM_EXPLANATION"
-    return jsonify({
-        "text": (
-            "Thank you for explaining how you feel.\n\n"
-            "Would you like me to explain each symptom "
-            "in simple and medical terms?"
-        ),
-        "options": ["Yes", "No"]
-    })
-
-    # -------------------------------
-    # CLARIFY SYMPTOMS
-    # -------------------------------
-    if stage == "CLARIFY_SYMPTOMS":
-        if user_input.startswith("y"):
-            session["symptoms"] = session.pop("pending_symptoms", [])
-            session["predictions"] = BUNDLE.predict(session["symptoms"])
-            session["stage"] = "ASK_SYMPTOM_EXPLANATION"
-            return jsonify({
-                "text": "Thank you for confirming. Would you like explanations?",
-                "options": ["Yes", "No"]
-            })
-        else:
-            session["stage"] = "ASK_SYMPTOMS"
-            return jsonify({
-                "text": "Okay, please rephrase or describe your symptoms again."
-            })
-
-    # -------------------------------
-    # ASK SYMPTOMS
-    # -------------------------------
     if stage == "ASK_SYMPTOMS":
         matched, clarifications = extract_symptoms_from_text(user_input)
 
         if not matched:
-            return jsonify({
-                "text": (
-                    "I couldn’t clearly identify your symptoms.\n\n"
-                    "Please describe how you feel in your own words.\n"
-                    "Example:\n"
-                    "• I feel very weak and my head is aching\n"
-                    "• I vomited and my body is hot"
-                )
-            })
+            return jsonify({"text": "I couldn’t understand your symptoms. Please describe again."})
 
         if clarifications:
             session["pending_symptoms"] = matched
             session["stage"] = "CLARIFY_SYMPTOMS"
-            return jsonify({
-                "text": "I want to be sure I understand you correctly:",
-                "items": clarifications,
-                "options": ["Yes", "No"]
-            })
+            return jsonify({"text": "Please confirm:", "items": clarifications, "options": ["Yes", "No"]})
 
         session["symptoms"] = matched
         session["predictions"] = BUNDLE.predict(matched)
-        session["stage"] = "ASK_SYMPTOM_EXPLANATION"
+        session["stage"] = "FINAL"
+        return jsonify({"text": "Here are possible conditions:", "items": session["predictions"]})
 
-        return jsonify({
-            "text": (
-                "Thank you for explaining how you feel.\n\n"
-                "Would you like me to explain each symptom "
-                "in simple and medical terms?"
-            ),
-            "options": ["Yes", "No"]
-        })
-
-    # -------------------------------
-    # SHOW DISEASES
-    # -------------------------------
-    if stage == "ASK_PREDICT_DISEASES":
-        if user_input.startswith("y") or "continue" in user_input:
+    if stage == "CLARIFY_SYMPTOMS":
+        if user_input.startswith("y"):
+            session["symptoms"] = session.pop("pending_symptoms", [])
+            session["predictions"] = BUNDLE.predict(session["symptoms"])
             session["stage"] = "FINAL"
-            return jsonify({
-                "text": "Based on your symptoms, these conditions are possible:",
-                "items": [
-                    f"{p['condition']} ({p['probability']})"
-                    for p in session.get("predictions", [])
-                ],
-                "advice": (
-                    "Please rest, stay hydrated, and monitor your symptoms."
-                ),
-                "disclaimer": (
-                    "⚠️ This is not a medical diagnosis. "
-                    "Seek professional care if symptoms worsen."
-                ),
-                "options": ["Check another condition", "End session"]
-            })
-        else:
-            session.clear()
-            return jsonify({
-                "text": "Okay. If you need help later, I’m always here"
-            })
+            return jsonify({"items": session["predictions"]})
+        session["stage"] = "ASK_SYMPTOMS"
+        return jsonify({"text": "Okay, please rephrase your symptoms."})
 
-    # -------------------------------
-    # FINAL / RESTART
-    # -------------------------------
-    if stage == "FINAL":
-        session.clear()
-        session["stage"] = "GREETING"
-        return jsonify({
-            "text": "Would you like to check another condition?",
-            "options": ["Yes", "No"]
-        })
-    return jsonify({"text": "I’m here whenever you’re ready."})
-
-
+    session.clear()
+    return jsonify({"text": "Session ended. Refresh to start again."})
 
 # ---------------------------
 # Run
