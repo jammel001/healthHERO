@@ -71,40 +71,203 @@ CANONICAL_SYMPTOMS = [
     "chest pain", "diarrhea", "abdominal pain"
 ]
 
-SYMPTOM_PHRASES = {
-    "fever": [
-        "hot body", "body is hot", "high temperature",
-        "feeling hot", "burning body", "chills"
-    ],
+SYMPTOM_ALIASES = {
 
-    "headache": [
-        "head hurts", "pain in my head", "heavy head",
-        "pressure in head", "migraine"
-    ],
+    # =======================
+    # FEVER / TEMPERATURE
+    # =======================
+    "hot body": "fever",
+    "body hot": "fever",
+    "high temperature": "fever",
+    "feeling hot": "fever",
+    "body heat": "fever",
+    "running temperature": "fever",
+    "burning body": "fever",
+    "hot inside": "fever",
+    "i feel hot": "fever",
+    "my body is hot": "fever",
+    "feverish": "fever",
+    "chills and fever": "fever",
+    "cold and hot": "fever",
 
-    "vomiting": [
-        "throwing up", "throw up", "vomited",
-        "retching"
-    ],
+    # =======================
+    # HEADACHE
+    # =======================
+    "head pain": "headache",
+    "pain in my head": "headache",
+    "pounding head": "headache",
+    "heavy head": "headache",
+    "head is aching": "headache",
+    "my head hurts": "headache",
+    "pain around my head": "headache",
+    "migraine": "headache",
+    "sharp head pain": "headache",
+    "head pressure": "headache",
+    "throbbing head": "headache",
 
-    "fatigue": [
-        "weak body", "feeling weak", "no strength",
-        "very tired"
-    ],
+    # =======================
+    # VOMITING / NAUSEA
+    # =======================
+    "throwing up": "vomiting",
+    "vomit": "vomiting",
+    "vomited": "vomiting",
+    "i vomited": "vomiting",
+    "throw up": "vomiting",
+    "throwing out": "vomiting",
+    "retching": "vomiting",
+    "nausea and vomiting": "vomiting",
+    "feel like vomiting": "vomiting",
+    "feel like throwing up": "vomiting",
+    "stomach upset and vomiting": "vomiting",
 
-    "loss of appetite": [
-        "not eating", "no appetite",
-        "food doesn’t interest me"
-    ],
+    # =======================
+    # NAUSEA ONLY
+    # =======================
+    "feeling nauseous": "nausea",
+    "feeling sick": "nausea",
+    "queasy stomach": "nausea",
+    "unsettled stomach": "nausea",
 
-    "abdominal pain": [
-        "stomach pain", "pain in my stomach",
-        "stomach ache"
-    ]
+    # =======================
+    # FATIGUE / WEAKNESS
+    # =======================
+    "weak body": "fatigue",
+    "very weak": "fatigue",
+    "tired all the time": "fatigue",
+    "no strength": "fatigue",
+    "body weakness": "fatigue",
+    "feeling weak": "fatigue",
+    "always tired": "fatigue",
+    "low energy": "fatigue",
+    "exhausted": "fatigue",
+    "easily tired": "fatigue",
+
+    # =======================
+    # APPETITE
+    # =======================
+    "loss of appetite": "loss of appetite",
+    "no appetite": "loss of appetite",
+    "poor appetite": "loss of appetite",
+    "cannot eat": "loss of appetite",
+    "not eating well": "loss of appetite",
+    "food does not interest me": "loss of appetite",
+    "reduced appetite": "loss of appetite",
+
+    # =======================
+    # COUGH
+    # =======================
+    "dry cough": "cough",
+    "persistent cough": "cough",
+    "continuous cough": "cough",
+    "coughing a lot": "cough",
+    "coughing": "cough",
+    "night cough": "cough",
+
+    # =======================
+    # CHEST
+    # =======================
+    "chest pain": "chest pain",
+    "pain in my chest": "chest pain",
+    "tight chest": "chest pain",
+    "chest tightness": "chest pain",
+    "burning chest": "chest pain",
+
+    # =======================
+    # BREATHING
+    # =======================
+    "shortness of breath": "shortness of breath",
+    "difficulty breathing": "shortness of breath",
+    "hard to breathe": "shortness of breath",
+    "breathing problem": "shortness of breath",
+    "fast breathing": "shortness of breath",
+
+    # =======================
+    # BODY PAIN
+    # =======================
+    "body pain": "body pain",
+    "general body pain": "body pain",
+    "body aches": "body pain",
+    "pain all over my body": "body pain",
+    "muscle pain": "muscle pain",
+    "joint pain": "joint pain",
+    "bone pain": "joint pain",
+
+    # =======================
+    # ABDOMINAL / STOMACH
+    # =======================
+    "stomach pain": "abdominal pain",
+    "stomach ache": "abdominal pain",
+    "abdominal pain": "abdominal pain",
+    "pain in my stomach": "abdominal pain",
+    "belly pain": "abdominal pain",
+    "lower stomach pain": "abdominal pain",
+    "upper stomach pain": "abdominal pain",
+
+    # =======================
+    # DIARRHEA
+    # =======================
+    "running stomach": "diarrhea",
+    "loose stool": "diarrhea",
+    "watery stool": "diarrhea",
+    "frequent stool": "diarrhea",
+    "diarrhoea": "diarrhea",
+
+    # =======================
+    # DIZZINESS
+    # =======================
+    "dizziness": "dizziness",
+    "feeling dizzy": "dizziness",
+    "lightheaded": "dizziness",
+    "head spinning": "dizziness",
+    "about to faint": "dizziness",
+
+    # =======================
+    # SORE THROAT
+    # =======================
+    "sore throat": "sore throat",
+    "throat pain": "sore throat",
+    "pain when swallowing": "sore throat",
+    "itchy throat": "sore throat",
+
+    # =======================
+    # SLEEP
+    # =======================
+    "cannot sleep": "insomnia",
+    "difficulty sleeping": "insomnia",
+    "poor sleep": "insomnia",
+    "sleepless nights": "insomnia"
 }
-def extract_symptoms_from_text(text: str) -> list:
+
+def extract_symptoms_from_text(text: str):
     text = text.lower()
-    detected = set()
+    extracted = set()
+    clarifications = []
+
+    # 1️⃣ Phrase matching
+    for phrase, symptom in SYMPTOM_ALIASES.items():
+        if phrase in text:
+            extracted.add(symptom)
+
+    # 2️⃣ Direct symptom keyword scan
+    for symptom in BUNDLE.symptoms:
+        pattern = r"\b" + re.escape(symptom) + r"\b"
+        if re.search(pattern, text):
+            extracted.add(symptom)
+
+    # 3️⃣ Fuzzy match fallback (single words)
+    words = re.findall(r"[a-z]+", text)
+    for word in words:
+        if word in extracted:
+            continue
+        match = process.extractOne(word, BUNDLE.symptoms, score_cutoff=85)
+        if match:
+            clarifications.append(
+                f"Did you mean '{match[0]}' instead of '{word}'?"
+            )
+            extracted.add(match[0])
+
+    return list(extracted), clarifications
+
 
     # Phrase-level detection
     for canonical, phrases in SYMPTOM_PHRASES.items():
@@ -298,48 +461,40 @@ def diagnose():
     # ASK SYMPTOMS
     # -------------------------------
     if stage == "ASK_SYMPTOMS":
-        tokens = [t.strip() for t in user_input.replace(";", ",").split(",") if t.strip()]
+    matched, clarifications = extract_symptoms_from_text(user_input)
 
-        if not tokens:
-            return jsonify({
-                "text": (
-                    "Please tell me at least one symptom.\n"
-                    "Example: fever, headache, vomiting."
-                )
-            })
-
-        matched, clarifications = BUNDLE.match_symptoms(tokens)
-
-        if clarifications:
-            session["pending_symptoms"] = matched
-            session["stage"] = "CLARIFY_SYMPTOMS"
-            return jsonify({
-                "text": "I want to be sure I understand you correctly:",
-                "items": clarifications,
-                "options": ["Yes", "No"]
-            })
-
-        if not matched:
-            return jsonify({
-                "text": (
-                    "I couldn’t recognize those symptoms clearly.\n\n"
-                    "Try simpler terms like:\n"
-                    "• fever\n• headache\n• cough\n• vomiting\n• body pain"
-                )
-            })
-
-        session["symptoms"] = matched
-        session["predictions"] = BUNDLE.predict(matched)
-        session["stage"] = "ASK_SYMPTOM_EXPLANATION"
-
+    if not matched:
         return jsonify({
             "text": (
-                "Thank you for sharing.\n\n"
-                "Would you like me to explain these symptoms "
-                "in both general and medical terms?"
-            ),
+                "I couldn’t clearly identify your symptoms.\n\n"
+                "Please describe how you feel in your own words.\n"
+                "Example:\n"
+                "• I feel very weak and my head is aching\n"
+                "• I vomited and my body is hot"
+            )
+        })
+
+    if clarifications:
+        session["pending_symptoms"] = matched
+        session["stage"] = "CLARIFY_SYMPTOMS"
+        return jsonify({
+            "text": "I want to be sure I understand you correctly:",
+            "items": clarifications,
             "options": ["Yes", "No"]
         })
+
+    session["symptoms"] = matched
+    session["predictions"] = BUNDLE.predict(matched)
+    session["stage"] = "ASK_SYMPTOM_EXPLANATION"
+
+    return jsonify({
+        "text": (
+            "Thank you for explaining how you feel.\n\n"
+            "Would you like me to explain each symptom "
+            "in simple and medical terms?"
+        ),
+        "options": ["Yes", "No"]
+    })
 
     # -------------------------------
     # CLARIFY SYMPTOMS
