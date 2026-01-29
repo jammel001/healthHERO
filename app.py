@@ -237,23 +237,19 @@ SYMPTOM_ALIASES = {
     "poor sleep": "insomnia",
     "sleepless nights": "insomnia"
 }
-
 def extract_symptoms_from_text(text: str):
     text = text.lower()
     extracted = set()
     clarifications = []
-
     # 1️⃣ Phrase matching (multi-word phrases)
     for phrase, symptom in SYMPTOM_ALIASES.items():
         if phrase in text:
             extracted.add(symptom)
-
     # 2️⃣ Direct canonical symptom matching
     for symptom in CANONICAL_SYMPTOMS:
         pattern = r"\b" + re.escape(symptom) + r"\b"
         if re.search(pattern, text):
             extracted.add(symptom)
-
     # 3️⃣ Fuzzy matching (single words fallback)
     words = re.findall(r"[a-z]+", text)
     for word in words:
@@ -267,7 +263,6 @@ def extract_symptoms_from_text(text: str):
                 f"Did you mean '{match[0]}' instead of '{word}'?"
             )
             extracted.add(match[0])
-
     return list(extracted), clarifications
 
 
@@ -289,19 +284,15 @@ class ModelBundle:
             self.embedding_matrix = symptom_embeddings[list(symptom_embeddings.files)[0]]
         else:
             self.embedding_matrix = None
-
     def match_symptoms(self, symptoms):
     matched = []
-
     for s in symptoms:
         if s in self.symptoms:
             matched.append(s)
             continue
-
         fuzzy = process.extractOne(s, self.symptoms, score_cutoff=85)
         if fuzzy:
             matched.append(fuzzy[0])
-
     return list(set(matched))
     
     def predict(self, matched):
@@ -324,19 +315,16 @@ class ModelBundle:
         return results
 
 BUNDLE = ModelBundle()
-
 # ---------------------------
 # Routes
 # ---------------------------
 @app.route("/")
 def home():
     return render_template("index.html")
-
 @app.route("/api/diagnose", methods=["POST"])
 def diagnose():
     data = request.json or {}
-
-    user_input = (
+  user_input = (
         data.get("message")
         or data.get("symptoms")
         or data.get("reply")
@@ -348,7 +336,6 @@ def diagnose():
         session.clear()
         session["stage"] = "GREETING"
         session["patient"] = {}
-
     stage = session["stage"]
 
     # -------------------------------
@@ -425,7 +412,6 @@ if normalized not in ["male", "female", "prefer not to say"]:
 
         session["patient"]["gender"] = normalized
         session["stage"] = "ASK_SYMPTOMS"
-
         return jsonify({
             "text": (
                 f"Thank you, {session['patient']['name']}.\n\n"
@@ -440,7 +426,6 @@ if normalized not in ["male", "female", "prefer not to say"]:
     # -------------------------------
   if stage == "ASK_SYMPTOMS":
     matched, clarifications = extract_symptoms_from_text(user_input)
-
     if not matched:
         return jsonify({
             "text": (
@@ -464,7 +449,6 @@ if normalized not in ["male", "female", "prefer not to say"]:
     session["symptoms"] = matched
     session["predictions"] = BUNDLE.predict(matched)
     session["stage"] = "ASK_SYMPTOM_EXPLANATION"
-
     return jsonify({
         "text": (
             "Thank you for explaining how you feel.\n\n"
@@ -550,7 +534,6 @@ if normalized not in ["male", "female", "prefer not to say"]:
             "text": "Would you like to check another condition?",
             "options": ["Yes", "No"]
         })
-
     return jsonify({"text": "I’m here whenever you’re ready."})
 
 
