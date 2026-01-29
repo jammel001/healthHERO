@@ -243,46 +243,27 @@ def extract_symptoms_from_text(text: str):
     extracted = set()
     clarifications = []
 
-    # 1️⃣ Phrase matching
+    # Phrase-level detection
     for phrase, symptom in SYMPTOM_ALIASES.items():
         if phrase in text:
             extracted.add(symptom)
 
-    # 2️⃣ Direct symptom keyword scan
+    # Direct symptom keyword detection
     for symptom in BUNDLE.symptoms:
-        pattern = r"\b" + re.escape(symptom) + r"\b"
-        if re.search(pattern, text):
+        if re.search(rf"\b{re.escape(symptom)}\b", text):
             extracted.add(symptom)
 
-    # 3️⃣ Fuzzy match fallback (single words)
+    # Fuzzy fallback (single words)
     words = re.findall(r"[a-z]+", text)
     for word in words:
-        if word in extracted:
-            continue
-        match = process.extractOne(word, BUNDLE.symptoms, score_cutoff=85)
-        if match:
+        match = process.extractOne(word, BUNDLE.symptoms, score_cutoff=88)
+        if match and match[0] not in extracted:
             clarifications.append(
                 f"Did you mean '{match[0]}' instead of '{word}'?"
             )
-            extracted.add(match[0])
 
     return list(extracted), clarifications
 
-
-    # Phrase-level detection
-    for canonical, phrases in SYMPTOM_PHRASES.items():
-        for phrase in phrases:
-            if phrase in text:
-                detected.add(canonical)
-
-    # Token-level fallback
-    tokens = re.split(",|and|with|;|\\.", text)
-    for token in tokens:
-        token = token.strip()
-        if token in CANONICAL_SYMPTOMS:
-            detected.add(token)
-
-    return list(detected)
 
 # ---------------------------
 # Model Bundle
@@ -439,13 +420,14 @@ def diagnose():
     # ASK GENDER
     # -------------------------------
     if stage == "ASK_GENDER":
-        if user_input not in ["male", "female", "prefer not to say"]:
+        normalized = user_input.lower()
+if normalized not in ["male", "female", "prefer not to say"]:
             return jsonify({
                 "text": "Please choose one option.",
                 "options": ["Male", "Female", "Prefer not to say"]
             })
 
-        session["patient"]["gender"] = user_input
+        session["patient"]["gender"] = normalized
         session["stage"] = "ASK_SYMPTOMS"
 
         return jsonify({
@@ -460,7 +442,7 @@ def diagnose():
     # -------------------------------
     # ASK SYMPTOMS
     # -------------------------------
-    if stage == "ASK_SYMPTOMS":
+  if stage == "ASK_SYMPTOMS":
     matched, clarifications = extract_symptoms_from_text(user_input)
 
     if not matched:
