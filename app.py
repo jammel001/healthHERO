@@ -171,6 +171,10 @@ BUNDLE = ModelBundle()
 def home():
     return render_template("index.html")
 
+@app.route("/guidelines")
+def guidelines():
+    return render_template("guidelines.html")
+
 
 @app.route("/api/diagnose", methods=["POST"])
 def diagnose():
