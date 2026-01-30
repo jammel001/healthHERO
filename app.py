@@ -12,6 +12,11 @@ from flask_cors import CORS
 from flask_session import Session
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from flask import send_file
+from reportlab.platypus import SimpleDocTemplate, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import A4
+
 # ---------------------------
 # App Config
 # ---------------------------
@@ -164,6 +169,57 @@ class ModelBundle:
 
 BUNDLE = ModelBundle()
 
+def determine_severity(days):
+    if days <= 3:
+        return "Mild"
+    elif days <= 6:
+        return "Moderate"
+    return "Severe"
+
+
+def emotional_advice(severity, name):
+    if severity == "Mild":
+        return (
+            f"{name}, this appears mild 🌱\n\n"
+            "Ensure rest, hydration, and follow precautions carefully."
+        )
+    if severity == "Moderate":
+        return (
+            f"{name}, your condition needs attention 🤍\n\n"
+            "Please consult a healthcare professional soon."
+        )
+    return (
+        f"{name}, I’m genuinely concerned 🚨\n\n"
+        "Please seek medical care immediately. Your health matters."
+    )
+
+
+def generate_prescription_pdf(data, filename):
+    doc = SimpleDocTemplate(filename, pagesize=A4)
+    styles = getSampleStyleSheet()
+    content = []
+
+    p = data["patient"]
+
+    content.append(Paragraph("<b>HealthChero Medical Summary</b>", styles["Title"]))
+    content.append(Paragraph(f"Name: {p['name']}", styles["Normal"]))
+    content.append(Paragraph(f"Age: {p['age']}", styles["Normal"]))
+    content.append(Paragraph(f"Gender: {p['gender']}", styles["Normal"]))
+    content.append(Paragraph(f"Date: {datetime.now().strftime('%Y-%m-%d')}", styles["Normal"]))
+
+    content.append(Paragraph("<b>Symptoms</b>", styles["Heading2"]))
+    content.append(Paragraph(", ".join(data["symptoms"]), styles["Normal"]))
+
+    content.append(Paragraph("<b>Severity</b>", styles["Heading2"]))
+    content.append(Paragraph(data["severity"], styles["Normal"]))
+
+    content.append(Paragraph(
+        "⚠️ This is not a medical diagnosis. Consult a healthcare professional.",
+        styles["Italic"]
+    ))
+
+    doc.build(content)
+
 # ---------------------------
 # Routes
 # ---------------------------
@@ -297,12 +353,50 @@ def diagnose():
                 f"Precautions: {', '.join(p['precautions'])}"
             )
 
-        session.clear()
+        session["predictions"] = predictions
+        session["stage"] = "ASK_DURATION"
+
         return jsonify({
             "text": "Based on your symptoms, these are the most likely conditions:",
             "items": formatted,
-            "disclaimer": "⚠️ This is not a medical diagnosis."
-        })
+            "disclaimer": "⚠️ This is not a medical diagnosis.",
+            "next": "How many days have you had these symptoms?"
+            
+            })
+
+    # ---------------- DURATION ----------------
+    if stage == "ASK_DURATION":
+    if not user_input.isdigit():
+        return jsonify({"text": "Please enter number of days (e.g. 3)."})
+
+    days = int(user_input)
+    severity = determine_severity(days)
+
+    session["duration"] = days
+    session["severity"] = severity
+    session["stage"] = "FINAL_ADVICE"
+
+    advice = emotional_advice(severity, session["patient"]["name"])
+
+    links = []
+    for p in session["predictions"]:
+        if p["condition"] in HEALTH_LINKS:
+            links.append(HEALTH_LINKS[p["condition"]])
+
+    return jsonify({
+        "text": advice,
+        "links": links,
+        "options": ["Download Prescription", "Finish"]
+    })
+
+    # ---------------- PDF DOWNLOAD ----------------
+@app.route("/download")
+def download():
+    filename = "healthchero_prescription.pdf"
+    generate_prescription_pdf(session, filename)
+    return send_file(filename, as_attachment=True)
+
+
 
     # ---------------- FALLBACK ----------------
     session.clear()
