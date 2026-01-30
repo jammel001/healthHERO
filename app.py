@@ -1,26 +1,16 @@
 import os
 import re
 from datetime import datetime
+from typing import List
 
 import joblib
 import numpy as np
 from rapidfuzz import process
 
-from flask import (
-    Flask,
-    request,
-    jsonify,
-    render_template,
-    session,
-    send_file
-)
+from flask import Flask, request, jsonify, render_template, session
 from flask_cors import CORS
 from flask_session import Session
 from werkzeug.middleware.proxy_fix import ProxyFix
-
-from reportlab.platypus import SimpleDocTemplate, Paragraph
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.pagesizes import A4
 
 # ---------------------------
 # App Config
@@ -58,6 +48,7 @@ def safe_numpy(path):
 # Load Models
 # ---------------------------
 symptom_encoder = safe_load(os.path.join(BASE_DIR, "symptom_encoder.pkl"))
+symptom_embeddings = safe_numpy(os.path.join(BASE_DIR, "symptom_embeddings.npz"))
 symptom_explanations = safe_load(
     os.path.join(BASE_DIR, "symptom_to_explanation.pkl")
 ) or {}
@@ -102,19 +93,29 @@ SYMPTOM_ALIASES = {
 # ---------------------------
 # Symptom Extraction
 # ---------------------------
-def extract_symptoms_from_text(text):
+def extract_symptoms_from_text(text: str):
     text = text.lower()
     extracted = set()
+    clarifications = []
 
     for phrase, symptom in SYMPTOM_ALIASES.items():
         if phrase in text:
             extracted.add(symptom)
 
     for symptom in CANONICAL_SYMPTOMS:
-        if re.search(rf"\b{symptom}\b", text):
+        if re.search(rf"\b{re.escape(symptom)}\b", text):
             extracted.add(symptom)
 
-    return list(extracted)
+    words = re.findall(r"[a-z]+", text)
+    for word in words:
+        match = process.extractOne(word, CANONICAL_SYMPTOMS, score_cutoff=85)
+        if match and match[0] not in extracted:
+            clarifications.append(
+                f"Did you mean '{match[0]}' instead of '{word}'?"
+            )
+            extracted.add(match[0])
+
+    return list(extracted), clarifications
 
 
 # ---------------------------
@@ -125,6 +126,21 @@ class ModelBundle:
         self.model = disease_model
         self.encoder = symptom_encoder
         self.label_encoder = label_encoder
+        self.symptoms = (
+            self.encoder.get_feature_names_out().tolist()
+            if self.encoder else []
+        )
+
+    def match_symptoms(self, symptoms):
+        matched = []
+        for s in symptoms:
+            if s in self.symptoms:
+                matched.append(s)
+            else:
+                fuzzy = process.extractOne(s, self.symptoms, score_cutoff=85)
+                if fuzzy:
+                    matched.append(fuzzy[0])
+        return list(set(matched))
 
     def predict(self, symptoms):
         if not symptoms or not self.model:
@@ -149,57 +165,6 @@ class ModelBundle:
 BUNDLE = ModelBundle()
 
 # ---------------------------
-# Severity & Advice
-# ---------------------------
-def determine_severity(days):
-    if days <= 3:
-        return "Mild"
-    elif days <= 6:
-        return "Moderate"
-    return "Severe"
-
-
-def emotional_advice(severity, name):
-    if severity == "Mild":
-        return f"{name}, this appears mild 🌱 Take rest and stay hydrated."
-    if severity == "Moderate":
-        return f"{name}, this needs attention 🤍 Please consult a doctor soon."
-    return f"{name}, I’m concerned 🚨 Please seek urgent medical care."
-
-
-# ---------------------------
-# PDF Generator
-# ---------------------------
-def generate_prescription_pdf(data, filename):
-    doc = SimpleDocTemplate(filename, pagesize=A4)
-    styles = getSampleStyleSheet()
-    content = []
-
-    p = data["patient"]
-
-    content.append(Paragraph("<b>HealthChero Medical Summary</b>", styles["Title"]))
-    content.append(Paragraph(f"Name: {p['name']}", styles["Normal"]))
-    content.append(Paragraph(f"Age: {p['age']}", styles["Normal"]))
-    content.append(Paragraph(f"Gender: {p['gender']}", styles["Normal"]))
-    content.append(Paragraph(f"Date: {datetime.now().strftime('%Y-%m-%d')}", styles["Normal"]))
-    content.append(Paragraph("<b>Symptoms</b>", styles["Heading2"]))
-    content.append(Paragraph(", ".join(data["symptoms"]), styles["Normal"]))
-    content.append(Paragraph("<b>Severity</b>", styles["Heading2"]))
-    content.append(Paragraph(data["severity"], styles["Normal"]))
-
-    doc.build(content)
-
-
-# ---------------------------
-# Health Links
-# ---------------------------
-HEALTH_LINKS = {
-    "Malaria": "https://www.who.int/news-room/fact-sheets/detail/malaria",
-    "Typhoid": "https://www.cdc.gov/typhoid-fever",
-    "Flu": "https://www.cdc.gov/flu"
-}
-
-# ---------------------------
 # Routes
 # ---------------------------
 @app.route("/")
@@ -207,15 +172,15 @@ def home():
     return render_template("index.html")
 
 
-@app.route("/guidelines")
-def guidelines():
-    return render_template("guidelines.html")
-
-
 @app.route("/api/diagnose", methods=["POST"])
 def diagnose():
     data = request.json or {}
-    user_input = (data.get("reply") or data.get("symptoms") or "").strip().lower()
+    user_input = (
+        data.get("message")
+        or data.get("symptoms")
+        or data.get("reply")
+        or ""
+    ).strip().lower()
 
     if "stage" not in session:
         session.clear()
@@ -224,91 +189,86 @@ def diagnose():
 
     stage = session["stage"]
 
+    # ---------------- GREETING ----------------
     if stage == "GREETING":
         session["stage"] = "ASK_CONSENT"
-        return jsonify({"text": "Hello 👋 I’m HealthChero. Shall we continue?", "options": ["Yes", "No"]})
+        return jsonify({
+            "text": "Hello 👋 I’m HealthChero. Shall we continue?",
+            "options": ["Yes", "No"]
+        })
 
+    # ---------------- CONSENT ----------------
     if stage == "ASK_CONSENT":
         if user_input.startswith("y"):
             session["stage"] = "ASK_NAME"
             return jsonify({"text": "What is your name?"})
-        session.clear()
-        return jsonify({"text": "Take care 🙏"})
 
+        session.clear()
+        return jsonify({"text": "No problem. Take care."})
+
+    # ---------------- NAME ----------------
     if stage == "ASK_NAME":
         session["patient"]["name"] = user_input.title()
         session["stage"] = "ASK_AGE"
         return jsonify({"text": "How old are you?"})
 
+    # ---------------- AGE ----------------
     if stage == "ASK_AGE":
         if not user_input.isdigit():
-            return jsonify({"text": "Enter a valid age."})
+            return jsonify({"text": "Please enter a valid age."})
         session["patient"]["age"] = int(user_input)
         session["stage"] = "ASK_GENDER"
         return jsonify({"text": "Gender?", "options": ["Male", "Female", "Prefer not to say"]})
 
+    # ---------------- GENDER ----------------
     if stage == "ASK_GENDER":
         session["patient"]["gender"] = user_input
         session["stage"] = "ASK_SYMPTOMS"
         return jsonify({"text": "Describe how you feel."})
 
+    # ---------------- SYMPTOMS ----------------
     if stage == "ASK_SYMPTOMS":
-        symptoms = extract_symptoms_from_text(user_input)
-        if not symptoms:
+        matched, clarifications = extract_symptoms_from_text(user_input)
+
+        if not matched:
             return jsonify({"text": "Please rephrase your symptoms."})
-        session["symptoms"] = symptoms
-        session["stage"] = "CONFIRM_PREDICTION"
-        return jsonify({"text": "Shall I analyze possible conditions?", "options": ["Yes", "No"]})
 
-    if stage == "CONFIRM_PREDICTION":
-        if not user_input.startswith("y"):
-            session.clear()
-            return jsonify({"text": "Session ended."})
-
-        predictions = BUNDLE.predict(session["symptoms"])
-        session["predictions"] = predictions
-        session["stage"] = "ASK_DURATION"
-
-        items = [
-            f"{p['condition']} ({int(p['probability']*100)}%)\n{p['description']}"
-            for p in predictions
-        ]
-
-        return jsonify({"items": items, "text": "How many days have you felt this way?"})
-
-    if stage == "ASK_DURATION":
-        if not user_input.isdigit():
-            return jsonify({"text": "Enter number of days (e.g. 3)."})
-
-        days = int(user_input)
-        severity = determine_severity(days)
-
-        session["duration"] = days
-        session["severity"] = severity
-        session["stage"] = "FINAL"
-
-        advice = emotional_advice(severity, session["patient"]["name"])
-        links = [HEALTH_LINKS[p["condition"]] for p in session["predictions"] if p["condition"] in HEALTH_LINKS]
-
+        session["symptoms"] = matched
+        session["stage"] = "ASK_SYMPTOM_EXPLANATION"
         return jsonify({
-            "text": advice,
-            "links": links,
-            "options": ["Download Prescription"]
+            "text": "Do you want explanations of your symptoms?",
+            "options": ["Yes", "No"]
         })
 
+    # ---------------- EXPLANATIONS ----------------
+    if stage == "ASK_SYMPTOM_EXPLANATION":
+        if user_input.startswith("y"):
+            explanations = [
+                f"{s.title()}: {symptom_explanations.get(s, 'No explanation available.')}"
+                for s in session["symptoms"]
+            ]
+            session["stage"] = "ASK_PREDICT_DISEASES"
+            return jsonify({"items": explanations, "options": ["Continue"]})
+
+        session["stage"] = "ASK_PREDICT_DISEASES"
+        return jsonify({"text": "Proceeding to illness prediction."})
+
+    # ---------------- PREDICT ----------------
+    if stage == "ASK_PREDICT_DISEASES":
+        predictions = BUNDLE.predict(session["symptoms"])
+        session.clear()
+        return jsonify({"items": predictions})
+
     session.clear()
-    return jsonify({"text": "Session finished."})
-
-
-@app.route("/download")
-def download():
-    filename = "healthchero_prescription.pdf"
-    generate_prescription_pdf(session, filename)
-    return send_file(filename, as_attachment=True)
+    return jsonify({"text": "Session ended."})
 
 
 # ---------------------------
 # Run
 # ---------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), debug=False)
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000)),
+        debug=False
+    )
