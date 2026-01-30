@@ -380,6 +380,7 @@ def diagnose():
         "text": "I detected these symptoms. Would you like to explain each one?",
         "options": ["Yes", "No"]
     })
+        
   if stage == "ASK_SYMPTOM_EXPLANATION":
     if user_input.startswith("y"):
         explanations = []
@@ -394,12 +395,14 @@ def diagnose():
             "items": explanations,
             "options": ["Continue to illness prediction", "Stop"]
         })
+        
     else:
         session["stage"] = "ASK_PREDICT_DISEASES"
         return jsonify({
             "text": "Okay. Shall I predict the most likely illnesses?",
             "options": ["Yes", "No"]
         })
+        
   if stage == "ASK_PREDICT_DISEASES":
     if user_input.startswith("y"):
         session["predictions"] = BUNDLE.predict(session["symptoms"])
@@ -410,6 +413,7 @@ def diagnose():
             "items": session["predictions"],
             "options": ["Explain these illnesses", "End session"]
         })
+        
     else:
         session.clear()
         return jsonify({"text": "Alright. Take care 🙏"})
@@ -427,6 +431,7 @@ def diagnose():
             "items": details,
             "disclaimer": "⚠️ This is not a medical diagnosis."
         })
+        
     else:
         session.clear()
         return jsonify({"text": "Thank you for using HealthChero."})
