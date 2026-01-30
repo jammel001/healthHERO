@@ -375,7 +375,7 @@ def diagnose():
             return jsonify({"text": "Please confirm:", "items": clarifications, "options": ["Yes", "No"]})
 
        session["symptoms"] = matched
-session["stage"] = "ASK_SYMPTOM_EXPLANATION"
+       session["stage"] = "ASK_SYMPTOM_EXPLANATION"
 
   if stage == "ASK_SYMPTOM_EXPLANATION":
     if user_input.startswith("y"):
