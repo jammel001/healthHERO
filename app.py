@@ -36,27 +36,35 @@ def safe_load(path):
     except Exception:
         return None
 
+
 def safe_numpy(path):
     try:
         return np.load(path, allow_pickle=True)
     except Exception:
         return None
 
+
 # ---------------------------
 # Load Models
 # ---------------------------
 symptom_encoder = safe_load(os.path.join(BASE_DIR, "symptom_encoder.pkl"))
 symptom_embeddings = safe_numpy(os.path.join(BASE_DIR, "symptom_embeddings.npz"))
-symptom_explanations = safe_load(os.path.join(BASE_DIR, "symptom_to_explanation.pkl")) or {}
+symptom_explanations = safe_load(
+    os.path.join(BASE_DIR, "symptom_to_explanation.pkl")
+) or {}
 
 disease_model = safe_load(os.path.join(BASE_DIR, "disease_model.pkl"))
-disease_descriptions = safe_load(os.path.join(BASE_DIR, "disease_to_description.pkl")) or {}
-disease_precautions = safe_load(os.path.join(BASE_DIR, "disease_to_precautions.pkl")) or {}
+disease_descriptions = safe_load(
+    os.path.join(BASE_DIR, "disease_to_description.pkl")
+) or {}
+disease_precautions = safe_load(
+    os.path.join(BASE_DIR, "disease_to_precautions.pkl")
+) or {}
 label_encoder = safe_load(os.path.join(BASE_DIR, "label_encoder.pkl"))
 
-# =====================================================
-# Phase 2 — Symptom Phrase Mapping (✅ CORRECT LOCATION)
-# =====================================================
+# ---------------------------
+# Symptom Canonical Map
+# ---------------------------
 CANONICAL_SYMPTOMS = [
     "fever", "headache", "vomiting", "nausea", "fatigue",
     "dizziness", "body pain", "loss of appetite", "cough",
@@ -64,158 +72,27 @@ CANONICAL_SYMPTOMS = [
     "abdominal pain", "sore throat", "insomnia"
 ]
 
-SYMPTOM_ALIASES = {    
-# =======================
-    # FEVER / TEMPERATURE
-    # =======================
+SYMPTOM_ALIASES = {
     "hot body": "fever",
-    "body hot": "fever",
-    "high temperature": "fever",
-    "feeling hot": "fever",
-    "body heat": "fever",
-    "running temperature": "fever",
-    "burning body": "fever",
-    "hot inside": "fever",
-    "i feel hot": "fever",
-    "my body is hot": "fever",
-    "feverish": "fever",
-    "chills and fever": "fever",
-    "cold and hot": "fever",
-    # =======================
-    # HEADACHE
-    # =======================
     "head pain": "headache",
-    "pain in my head": "headache",
-    "pounding head": "headache",
-    "heavy head": "headache",
-    "head is aching": "headache",
-    "my head hurts": "headache",
-    "pain around my head": "headache",
-    "migraine": "headache",
-    "sharp head pain": "headache",
-    "head pressure": "headache",
-    "throbbing head": "headache",
-    # =======================
-    # VOMITING / NAUSEA
-    # =======================
     "throwing up": "vomiting",
-    "vomit": "vomiting",
-    "vomited": "vomiting",
-    "i vomited": "vomiting",
-    "throw up": "vomiting",
-    "throwing out": "vomiting",
-    "retching": "vomiting",
-    "nausea and vomiting": "vomiting",
-    "feel like vomiting": "vomiting",
-    "feel like throwing up": "vomiting",
-    "stomach upset and vomiting": "vomiting",
-    # =======================
-    # NAUSEA ONLY
-    # =======================
     "feeling nauseous": "nausea",
-    "feeling sick": "nausea",
-    "queasy stomach": "nausea",
-    "unsettled stomach": "nausea",
-    # =======================
-    # FATIGUE / WEAKNESS
-    # =======================
     "weak body": "fatigue",
-    "very weak": "fatigue",
-    "tired all the time": "fatigue",
-    "no strength": "fatigue",
-    "body weakness": "fatigue",
-    "feeling weak": "fatigue",
-    "always tired": "fatigue",
-    "low energy": "fatigue",
-    "exhausted": "fatigue",
-    "easily tired": "fatigue",
-    # =======================
-    # APPETITE
-    # =======================
-    "loss of appetite": "loss of appetite",
     "no appetite": "loss of appetite",
-    "poor appetite": "loss of appetite",
-    "cannot eat": "loss of appetite",
-    "not eating well": "loss of appetite",
-    "food does not interest me": "loss of appetite",
-    "reduced appetite": "loss of appetite",
-    # =======================
-    # COUGH
-    # =======================
     "dry cough": "cough",
-    "persistent cough": "cough",
-    "continuous cough": "cough",
-    "coughing a lot": "cough",
-    "coughing": "cough",
-    "night cough": "cough",
-    # =======================
-    # CHEST
-    # =======================
-    "chest pain": "chest pain",
-    "pain in my chest": "chest pain",
     "tight chest": "chest pain",
-    "chest tightness": "chest pain",
-    "burning chest": "chest pain",
-    # =======================
-    # BREATHING
-    # =======================
-    "shortness of breath": "shortness of breath",
     "difficulty breathing": "shortness of breath",
-    "hard to breathe": "shortness of breath",
-    "breathing problem": "shortness of breath",
-    "fast breathing": "shortness of breath",
-    # =======================
-    # BODY PAIN
-    # =======================
-    "body pain": "body pain",
-    "general body pain": "body pain",
     "body aches": "body pain",
-    "pain all over my body": "body pain",
-    "muscle pain": "muscle pain",
-    "joint pain": "joint pain",
-    "bone pain": "joint pain",
-    # =======================
-    # ABDOMINAL / STOMACH
-    # =======================
     "stomach pain": "abdominal pain",
-    "stomach ache": "abdominal pain",
-    "abdominal pain": "abdominal pain",
-    "pain in my stomach": "abdominal pain",
-    "belly pain": "abdominal pain",
-    "lower stomach pain": "abdominal pain",
-    "upper stomach pain": "abdominal pain",
-    # =======================
-    # DIARRHEA
-    # =======================
     "running stomach": "diarrhea",
-    "loose stool": "diarrhea",
-    "watery stool": "diarrhea",
-    "frequent stool": "diarrhea",
-    "diarrhoea": "diarrhea",
-    # =======================
-    # DIZZINESS
-    # =======================
-    "dizziness": "dizziness",
     "feeling dizzy": "dizziness",
-    "lightheaded": "dizziness",
-    "head spinning": "dizziness",
-    "about to faint": "dizziness",
-    # =======================
-    # SORE THROAT
-    # =======================
-    "sore throat": "sore throat",
     "throat pain": "sore throat",
-    "pain when swallowing": "sore throat",
-    "itchy throat": "sore throat",
-    # =======================
-    # SLEEP
-    # =======================
     "cannot sleep": "insomnia",
-    "difficulty sleeping": "insomnia",
-    "poor sleep": "insomnia",
-    "sleepless nights": "insomnia"
 }
 
+# ---------------------------
+# Symptom Extraction
+# ---------------------------
 def extract_symptoms_from_text(text: str):
     text = text.lower()
     extracted = set()
@@ -233,20 +110,22 @@ def extract_symptoms_from_text(text: str):
     for word in words:
         match = process.extractOne(word, CANONICAL_SYMPTOMS, score_cutoff=85)
         if match and match[0] not in extracted:
-            clarifications.append(f"Did you mean '{match[0]}' instead of '{word}'?")
+            clarifications.append(
+                f"Did you mean '{match[0]}' instead of '{word}'?"
+            )
             extracted.add(match[0])
 
     return list(extracted), clarifications
 
-# ===========================
+
+# ---------------------------
 # Model Bundle
-# ===========================
+# ---------------------------
 class ModelBundle:
     def __init__(self):
         self.model = disease_model
         self.encoder = symptom_encoder
         self.label_encoder = label_encoder
-
         self.symptoms = (
             self.encoder.get_feature_names_out().tolist()
             if self.encoder else []
@@ -263,11 +142,11 @@ class ModelBundle:
                     matched.append(fuzzy[0])
         return list(set(matched))
 
-    def predict(self, matched):
-        if not matched or not self.model:
+    def predict(self, symptoms):
+        if not symptoms or not self.model:
             return []
 
-        X = self.encoder.transform([" ".join(matched)])
+        X = self.encoder.transform([" ".join(symptoms)])
         probs = self.model.predict_proba(X)[0]
         top_idxs = np.argsort(probs)[::-1][:3]
 
@@ -282,6 +161,7 @@ class ModelBundle:
             })
         return results
 
+
 BUNDLE = ModelBundle()
 
 # ---------------------------
@@ -291,10 +171,10 @@ BUNDLE = ModelBundle()
 def home():
     return render_template("index.html")
 
+
 @app.route("/api/diagnose", methods=["POST"])
 def diagnose():
     data = request.json or {}
-
     user_input = (
         data.get("message")
         or data.get("symptoms")
@@ -302,7 +182,6 @@ def diagnose():
         or ""
     ).strip().lower()
 
-    # Initialize conversation
     if "stage" not in session:
         session.clear()
         session["stage"] = "GREETING"
@@ -310,158 +189,86 @@ def diagnose():
 
     stage = session["stage"]
 
-    # -------------------------------
-    # GREETING
-    # -------------------------------
+    # ---------------- GREETING ----------------
     if stage == "GREETING":
         session["stage"] = "ASK_CONSENT"
         return jsonify({
-            "text": (
-                "Hello 👋 I’m HealthChero, your virtual health assistant.\n\n"
-                "I’ll ask a few questions to better understand how you feel.\n"
-                "⚠️ This is not a medical diagnosis.\n\n"
-                "Shall we continue?"
-            ),
+            "text": "Hello 👋 I’m HealthChero. Shall we continue?",
             "options": ["Yes", "No"]
         })
 
-    # -------------------------------
-    # ASK CONSENT
-    # -------------------------------
+    # ---------------- CONSENT ----------------
     if stage == "ASK_CONSENT":
-        if user_input in ["yes", "y", "ok", "okay", "continue"]:
+        if user_input.startswith("y"):
             session["stage"] = "ASK_NAME"
-            return jsonify({
-                "text": "Great 👍 What is your name?"
-            })
+            return jsonify({"text": "What is your name?"})
 
-        if user_input in ["no", "n"]:
-            session.clear()
-            return jsonify({
-                "text": "No problem. If you need help later, I’m here."
-            })
+        session.clear()
+        return jsonify({"text": "No problem. Take care."})
 
-        return jsonify({
-            "text": "Please choose one option.",
-            "options": ["Yes", "No"]
-        })
-
+    # ---------------- NAME ----------------
     if stage == "ASK_NAME":
         session["patient"]["name"] = user_input.title()
         session["stage"] = "ASK_AGE"
         return jsonify({"text": "How old are you?"})
 
+    # ---------------- AGE ----------------
     if stage == "ASK_AGE":
         if not user_input.isdigit():
             return jsonify({"text": "Please enter a valid age."})
         session["patient"]["age"] = int(user_input)
         session["stage"] = "ASK_GENDER"
-        return jsonify({"text": "What is your gender?", "options": ["Male", "Female", "Prefer not to say"]})
+        return jsonify({"text": "Gender?", "options": ["Male", "Female", "Prefer not to say"]})
 
+    # ---------------- GENDER ----------------
     if stage == "ASK_GENDER":
         session["patient"]["gender"] = user_input
         session["stage"] = "ASK_SYMPTOMS"
-        return jsonify({"text": "Please describe how you are feeling."})
+        return jsonify({"text": "Describe how you feel."})
 
+    # ---------------- SYMPTOMS ----------------
     if stage == "ASK_SYMPTOMS":
         matched, clarifications = extract_symptoms_from_text(user_input)
 
         if not matched:
-            return jsonify({"text": "I couldn’t understand your symptoms. Please describe again."})
-
-        if clarifications:
-            session["pending_symptoms"] = matched
-            session["stage"] = "CLARIFY_SYMPTOMS"
-            return jsonify({"text": "Please confirm:", "items": clarifications, "options": ["Yes", "No"]})
+            return jsonify({"text": "Please rephrase your symptoms."})
 
         session["symptoms"] = matched
         session["stage"] = "ASK_SYMPTOM_EXPLANATION"
         return jsonify({
-        "text": "I detected these symptoms. Would you like to explain each one?",
-        "options": ["Yes", "No"]
-    })
-        
-   elif stage == "ASK_SYMPTOM_EXPLANATION":
-
-    if user_input.lower().startswith("y"):
-        explanations = []
-
-        for s in session["symptoms"]:
-            explanations.append(
-                f"🔹 {s.title()}: {symptom_explanations.get(s, 'No explanation available.')}"
-            )
-
-        session["stage"] = "ASK_PREDICT_DISEASES"
-
-        return jsonify({
-            "text": "Here’s an explanation of your symptoms:",
-            "items": explanations,
-            "options": ["Continue to illness prediction", "Stop"]
-        })
-
-    else:
-        session["stage"] = "ASK_PREDICT_DISEASES"
-
-        return jsonify({
-            "text": "Okay 👍 I’ll skip explanations and move to illness prediction.",
-            "options": ["Continue to illness prediction", "Stop"]
-        })
-
-    else:
-        session["stage"] = "ASK_PREDICT_DISEASES"
-        return jsonify({
-            "text": "Okay. Shall I predict the most likely illnesses?",
+            "text": "Do you want explanations of your symptoms?",
             "options": ["Yes", "No"]
         })
-        
-   if stage == "ASK_PREDICT_DISEASES":
-     if user_input.startswith("y"):
-        session["predictions"] = BUNDLE.predict(session["symptoms"])
-        session["stage"] = "ASK_ILLNESS_EXPLANATION"
 
-        return jsonify({
-            "text": "Based on your symptoms, these conditions are most likely:",
-            "items": session["predictions"],
-            "options": ["Explain these illnesses", "End session"]
-        })
-        
-    else:
-        session.clear()
-        return jsonify({"text": "Alright. Take care 🙏"})
-        
-  if stage == "ASK_ILLNESS_EXPLANATION":
-     if user_input.startswith("y"):
-        details = []
-        for p in session["predictions"]:
-            details.append(
-                f"🩺 {p['condition']}:\n{p['description']}\nPrecautions: {', '.join(p['precautions'])}"
-            )
-
-        session["stage"] = "FINAL"
-        return jsonify({
-            "text": "Here are details about the possible illnesses:",
-            "items": details,
-            "disclaimer": "⚠️ This is not a medical diagnosis."
-        })
-        
-    else:
-        session.clear()
-        return jsonify({"text": "Thank you for using HealthChero."})
-
-    if stage == "CLARIFY_SYMPTOMS":
+    # ---------------- EXPLANATIONS ----------------
+    if stage == "ASK_SYMPTOM_EXPLANATION":
         if user_input.startswith("y"):
-            session["symptoms"] = session.pop("pending_symptoms", [])
-            session["predictions"] = BUNDLE.predict(session["symptoms"])
-            session["stage"] = "FINAL"
-            return jsonify({"items": session["predictions"]})
-        session["stage"] = "ASK_SYMPTOMS"
-        return jsonify({"text": "Okay, please rephrase your symptoms."})
+            explanations = [
+                f"{s.title()}: {symptom_explanations.get(s, 'No explanation available.')}"
+                for s in session["symptoms"]
+            ]
+            session["stage"] = "ASK_PREDICT_DISEASES"
+            return jsonify({"items": explanations, "options": ["Continue"]})
+
+        session["stage"] = "ASK_PREDICT_DISEASES"
+        return jsonify({"text": "Proceeding to illness prediction."})
+
+    # ---------------- PREDICT ----------------
+    if stage == "ASK_PREDICT_DISEASES":
+        predictions = BUNDLE.predict(session["symptoms"])
+        session.clear()
+        return jsonify({"items": predictions})
 
     session.clear()
-    return jsonify({"text": "Session ended. Refresh to start again."})
+    return jsonify({"text": "Session ended."})
+
 
 # ---------------------------
 # Run
 # ---------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), debug=False)
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000)),
+        debug=False
+    )
