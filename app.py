@@ -381,8 +381,8 @@ def diagnose():
         "options": ["Yes", "No"]
     })
         
-  if stage == "ASK_SYMPTOM_EXPLANATION":
-    if user_input.startswith("y"):
+   if stage == "ASK_SYMPTOM_EXPLANATION":
+     if user_input.startswith("y"):
         explanations = []
         for s in session["symptoms"]:
             explanations.append(
@@ -403,8 +403,8 @@ def diagnose():
             "options": ["Yes", "No"]
         })
         
-  if stage == "ASK_PREDICT_DISEASES":
-    if user_input.startswith("y"):
+   if stage == "ASK_PREDICT_DISEASES":
+     if user_input.startswith("y"):
         session["predictions"] = BUNDLE.predict(session["symptoms"])
         session["stage"] = "ASK_ILLNESS_EXPLANATION"
 
@@ -417,8 +417,9 @@ def diagnose():
     else:
         session.clear()
         return jsonify({"text": "Alright. Take care 🙏"})
- if stage == "ASK_ILLNESS_EXPLANATION":
-    if user_input.startswith("y"):
+        
+  if stage == "ASK_ILLNESS_EXPLANATION":
+     if user_input.startswith("y"):
         details = []
         for p in session["predictions"]:
             details.append(
