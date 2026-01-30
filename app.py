@@ -175,10 +175,10 @@ def home():
 @app.route("/api/diagnose", methods=["POST"])
 def diagnose():
     data = request.json or {}
+
     user_input = (
-        data.get("message")
+        data.get("reply")
         or data.get("symptoms")
-        or data.get("reply")
         or ""
     ).strip().lower()
 
@@ -204,7 +204,7 @@ def diagnose():
             return jsonify({"text": "What is your name?"})
 
         session.clear()
-        return jsonify({"text": "No problem. Take care."})
+        return jsonify({"text": "No problem. Take care 🙏"})
 
     # ---------------- NAME ----------------
     if stage == "ASK_NAME":
@@ -216,9 +216,13 @@ def diagnose():
     if stage == "ASK_AGE":
         if not user_input.isdigit():
             return jsonify({"text": "Please enter a valid age."})
+
         session["patient"]["age"] = int(user_input)
         session["stage"] = "ASK_GENDER"
-        return jsonify({"text": "Gender?", "options": ["Male", "Female", "Prefer not to say"]})
+        return jsonify({
+            "text": "Gender?",
+            "options": ["Male", "Female", "Prefer not to say"]
+        })
 
     # ---------------- GENDER ----------------
     if stage == "ASK_GENDER":
@@ -231,36 +235,75 @@ def diagnose():
         matched, clarifications = extract_symptoms_from_text(user_input)
 
         if not matched:
-            return jsonify({"text": "Please rephrase your symptoms."})
+            return jsonify({
+                "text": "I couldn’t understand your symptoms. Please rephrase."
+            })
 
         session["symptoms"] = matched
         session["stage"] = "ASK_SYMPTOM_EXPLANATION"
+
         return jsonify({
             "text": "Do you want explanations of your symptoms?",
             "options": ["Yes", "No"]
         })
 
-    # ---------------- EXPLANATIONS ----------------
+    # ---------------- SYMPTOM EXPLANATION ----------------
     if stage == "ASK_SYMPTOM_EXPLANATION":
         if user_input.startswith("y"):
-            explanations = [
-                f"{s.title()}: {symptom_explanations.get(s, 'No explanation available.')}"
-                for s in session["symptoms"]
-            ]
-            session["stage"] = "ASK_PREDICT_DISEASES"
-            return jsonify({"items": explanations, "options": ["Continue"]})
+            explanations = []
 
-        session["stage"] = "ASK_PREDICT_DISEASES"
-        return jsonify({"text": "Proceeding to illness prediction."})
+            for s in session["symptoms"]:
+                info = symptom_explanations.get(s, {})
+                general = info.get("general", "No general explanation available.")
+                medical = info.get("medical", "No medical explanation available.")
 
-    # ---------------- PREDICT ----------------
-    if stage == "ASK_PREDICT_DISEASES":
+                explanations.append(
+                    f"🔹 {s.title()}\n"
+                    f"General: {general}\n"
+                    f"Medical: {medical}"
+                )
+
+            session["stage"] = "CONFIRM_PREDICTION"
+            return jsonify({
+                "text": "Here is what each symptom means:",
+                "items": explanations,
+                "options": ["Continue", "Stop"]
+            })
+
+        session["stage"] = "CONFIRM_PREDICTION"
+        return jsonify({
+            "text": "Okay 👍 Shall I predict possible illnesses?",
+            "options": ["Yes", "No"]
+        })
+
+    # ---------------- CONFIRM PREDICTION ----------------
+    if stage == "CONFIRM_PREDICTION":
+        if not user_input.startswith(("y", "c")):
+            session.clear()
+            return jsonify({"text": "Alright. Take care 🙏"})
+
         predictions = BUNDLE.predict(session["symptoms"])
-        session.clear()
-        return jsonify({"items": predictions})
 
+        formatted = []
+        for p in predictions:
+            formatted.append(
+                f"🩺 {p['condition']}\n"
+                f"Likelihood: {int(p['probability'] * 100)}%\n"
+                f"{p['description']}\n"
+                f"Precautions: {', '.join(p['precautions'])}"
+            )
+
+        session.clear()
+        return jsonify({
+            "text": "Based on your symptoms, these are the most likely conditions:",
+            "items": formatted,
+            "disclaimer": "⚠️ This is not a medical diagnosis."
+        })
+
+    # ---------------- FALLBACK ----------------
     session.clear()
-    return jsonify({"text": "Session ended."})
+    return jsonify({"text": "Session ended. Please refresh to start again."})
+
 
 
 # ---------------------------
