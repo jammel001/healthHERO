@@ -381,21 +381,32 @@ def diagnose():
         "options": ["Yes", "No"]
     })
         
-   if stage == "ASK_SYMPTOM_EXPLANATION":
-     if user_input.startswith("y"):
+   elif stage == "ASK_SYMPTOM_EXPLANATION":
+
+    if user_input.lower().startswith("y"):
         explanations = []
+
         for s in session["symptoms"]:
             explanations.append(
                 f"🔹 {s.title()}: {symptom_explanations.get(s, 'No explanation available.')}"
             )
 
         session["stage"] = "ASK_PREDICT_DISEASES"
+
         return jsonify({
             "text": "Here’s an explanation of your symptoms:",
             "items": explanations,
             "options": ["Continue to illness prediction", "Stop"]
         })
-        
+
+    else:
+        session["stage"] = "ASK_PREDICT_DISEASES"
+
+        return jsonify({
+            "text": "Okay 👍 I’ll skip explanations and move to illness prediction.",
+            "options": ["Continue to illness prediction", "Stop"]
+        })
+
     else:
         session["stage"] = "ASK_PREDICT_DISEASES"
         return jsonify({
