@@ -1,18 +1,23 @@
 import os
 import re
 from datetime import datetime
-from typing import List
 
 import joblib
 import numpy as np
 from rapidfuzz import process
 
-from flask import Flask, request, jsonify, render_template, session
+from flask import (
+    Flask,
+    request,
+    jsonify,
+    render_template,
+    session,
+    send_file
+)
 from flask_cors import CORS
 from flask_session import Session
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from flask import send_file
 from reportlab.platypus import SimpleDocTemplate, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.pagesizes import A4
@@ -53,7 +58,6 @@ def safe_numpy(path):
 # Load Models
 # ---------------------------
 symptom_encoder = safe_load(os.path.join(BASE_DIR, "symptom_encoder.pkl"))
-symptom_embeddings = safe_numpy(os.path.join(BASE_DIR, "symptom_embeddings.npz"))
 symptom_explanations = safe_load(
     os.path.join(BASE_DIR, "symptom_to_explanation.pkl")
 ) or {}
@@ -98,29 +102,19 @@ SYMPTOM_ALIASES = {
 # ---------------------------
 # Symptom Extraction
 # ---------------------------
-def extract_symptoms_from_text(text: str):
+def extract_symptoms_from_text(text):
     text = text.lower()
     extracted = set()
-    clarifications = []
 
     for phrase, symptom in SYMPTOM_ALIASES.items():
         if phrase in text:
             extracted.add(symptom)
 
     for symptom in CANONICAL_SYMPTOMS:
-        if re.search(rf"\b{re.escape(symptom)}\b", text):
+        if re.search(rf"\b{symptom}\b", text):
             extracted.add(symptom)
 
-    words = re.findall(r"[a-z]+", text)
-    for word in words:
-        match = process.extractOne(word, CANONICAL_SYMPTOMS, score_cutoff=85)
-        if match and match[0] not in extracted:
-            clarifications.append(
-                f"Did you mean '{match[0]}' instead of '{word}'?"
-            )
-            extracted.add(match[0])
-
-    return list(extracted), clarifications
+    return list(extracted)
 
 
 # ---------------------------
@@ -131,21 +125,6 @@ class ModelBundle:
         self.model = disease_model
         self.encoder = symptom_encoder
         self.label_encoder = label_encoder
-        self.symptoms = (
-            self.encoder.get_feature_names_out().tolist()
-            if self.encoder else []
-        )
-
-    def match_symptoms(self, symptoms):
-        matched = []
-        for s in symptoms:
-            if s in self.symptoms:
-                matched.append(s)
-            else:
-                fuzzy = process.extractOne(s, self.symptoms, score_cutoff=85)
-                if fuzzy:
-                    matched.append(fuzzy[0])
-        return list(set(matched))
 
     def predict(self, symptoms):
         if not symptoms or not self.model:
@@ -169,6 +148,9 @@ class ModelBundle:
 
 BUNDLE = ModelBundle()
 
+# ---------------------------
+# Severity & Advice
+# ---------------------------
 def determine_severity(days):
     if days <= 3:
         return "Mild"
@@ -179,21 +161,15 @@ def determine_severity(days):
 
 def emotional_advice(severity, name):
     if severity == "Mild":
-        return (
-            f"{name}, this appears mild 🌱\n\n"
-            "Ensure rest, hydration, and follow precautions carefully."
-        )
+        return f"{name}, this appears mild 🌱 Take rest and stay hydrated."
     if severity == "Moderate":
-        return (
-            f"{name}, your condition needs attention 🤍\n\n"
-            "Please consult a healthcare professional soon."
-        )
-    return (
-        f"{name}, I’m genuinely concerned 🚨\n\n"
-        "Please seek medical care immediately. Your health matters."
-    )
+        return f"{name}, this needs attention 🤍 Please consult a doctor soon."
+    return f"{name}, I’m concerned 🚨 Please seek urgent medical care."
 
 
+# ---------------------------
+# PDF Generator
+# ---------------------------
 def generate_prescription_pdf(data, filename):
     doc = SimpleDocTemplate(filename, pagesize=A4)
     styles = getSampleStyleSheet()
@@ -206,19 +182,22 @@ def generate_prescription_pdf(data, filename):
     content.append(Paragraph(f"Age: {p['age']}", styles["Normal"]))
     content.append(Paragraph(f"Gender: {p['gender']}", styles["Normal"]))
     content.append(Paragraph(f"Date: {datetime.now().strftime('%Y-%m-%d')}", styles["Normal"]))
-
     content.append(Paragraph("<b>Symptoms</b>", styles["Heading2"]))
     content.append(Paragraph(", ".join(data["symptoms"]), styles["Normal"]))
-
     content.append(Paragraph("<b>Severity</b>", styles["Heading2"]))
     content.append(Paragraph(data["severity"], styles["Normal"]))
 
-    content.append(Paragraph(
-        "⚠️ This is not a medical diagnosis. Consult a healthcare professional.",
-        styles["Italic"]
-    ))
-
     doc.build(content)
+
+
+# ---------------------------
+# Health Links
+# ---------------------------
+HEALTH_LINKS = {
+    "Malaria": "https://www.who.int/news-room/fact-sheets/detail/malaria",
+    "Typhoid": "https://www.cdc.gov/typhoid-fever",
+    "Flu": "https://www.cdc.gov/flu"
+}
 
 # ---------------------------
 # Routes
@@ -226,6 +205,7 @@ def generate_prescription_pdf(data, filename):
 @app.route("/")
 def home():
     return render_template("index.html")
+
 
 @app.route("/guidelines")
 def guidelines():
@@ -235,12 +215,7 @@ def guidelines():
 @app.route("/api/diagnose", methods=["POST"])
 def diagnose():
     data = request.json or {}
-
-    user_input = (
-        data.get("reply")
-        or data.get("symptoms")
-        or ""
-    ).strip().lower()
+    user_input = (data.get("reply") or data.get("symptoms") or "").strip().lower()
 
     if "stage" not in session:
         session.clear()
@@ -249,147 +224,82 @@ def diagnose():
 
     stage = session["stage"]
 
-    # ---------------- GREETING ----------------
     if stage == "GREETING":
         session["stage"] = "ASK_CONSENT"
-        return jsonify({
-            "text": "Hello 👋 I’m HealthChero. Shall we continue?",
-            "options": ["Yes", "No"]
-        })
+        return jsonify({"text": "Hello 👋 I’m HealthChero. Shall we continue?", "options": ["Yes", "No"]})
 
-    # ---------------- CONSENT ----------------
     if stage == "ASK_CONSENT":
         if user_input.startswith("y"):
             session["stage"] = "ASK_NAME"
             return jsonify({"text": "What is your name?"})
-
         session.clear()
-        return jsonify({"text": "No problem. Take care 🙏"})
+        return jsonify({"text": "Take care 🙏"})
 
-    # ---------------- NAME ----------------
     if stage == "ASK_NAME":
         session["patient"]["name"] = user_input.title()
         session["stage"] = "ASK_AGE"
         return jsonify({"text": "How old are you?"})
 
-    # ---------------- AGE ----------------
     if stage == "ASK_AGE":
         if not user_input.isdigit():
-            return jsonify({"text": "Please enter a valid age."})
-
+            return jsonify({"text": "Enter a valid age."})
         session["patient"]["age"] = int(user_input)
         session["stage"] = "ASK_GENDER"
-        return jsonify({
-            "text": "Gender?",
-            "options": ["Male", "Female", "Prefer not to say"]
-        })
+        return jsonify({"text": "Gender?", "options": ["Male", "Female", "Prefer not to say"]})
 
-    # ---------------- GENDER ----------------
     if stage == "ASK_GENDER":
         session["patient"]["gender"] = user_input
         session["stage"] = "ASK_SYMPTOMS"
         return jsonify({"text": "Describe how you feel."})
 
-    # ---------------- SYMPTOMS ----------------
     if stage == "ASK_SYMPTOMS":
-        matched, clarifications = extract_symptoms_from_text(user_input)
-
-        if not matched:
-            return jsonify({
-                "text": "I couldn’t understand your symptoms. Please rephrase."
-            })
-
-        session["symptoms"] = matched
-        session["stage"] = "ASK_SYMPTOM_EXPLANATION"
-
-        return jsonify({
-            "text": "Do you want explanations of your symptoms?",
-            "options": ["Yes", "No"]
-        })
-
-    # ---------------- SYMPTOM EXPLANATION ----------------
-    if stage == "ASK_SYMPTOM_EXPLANATION":
-        if user_input.startswith("y"):
-            explanations = []
-
-            for s in session["symptoms"]:
-                info = symptom_explanations.get(s, {})
-                general = info.get("general", "No general explanation available.")
-                medical = info.get("medical", "No medical explanation available.")
-
-                explanations.append(
-                    f"🔹 {s.title()}\n"
-                    f"General: {general}\n"
-                    f"Medical: {medical}"
-                )
-
-            session["stage"] = "CONFIRM_PREDICTION"
-            return jsonify({
-                "text": "Here is what each symptom means:",
-                "items": explanations,
-                "options": ["Continue", "Stop"]
-            })
-
+        symptoms = extract_symptoms_from_text(user_input)
+        if not symptoms:
+            return jsonify({"text": "Please rephrase your symptoms."})
+        session["symptoms"] = symptoms
         session["stage"] = "CONFIRM_PREDICTION"
-        return jsonify({
-            "text": "Okay 👍 Shall I predict possible illnesses?",
-            "options": ["Yes", "No"]
-        })
+        return jsonify({"text": "Shall I analyze possible conditions?", "options": ["Yes", "No"]})
 
-    # ---------------- CONFIRM PREDICTION ----------------
     if stage == "CONFIRM_PREDICTION":
-        if not user_input.startswith(("y", "c")):
+        if not user_input.startswith("y"):
             session.clear()
-            return jsonify({"text": "Alright. Take care 🙏"})
+            return jsonify({"text": "Session ended."})
 
         predictions = BUNDLE.predict(session["symptoms"])
-
-        formatted = []
-        for p in predictions:
-            formatted.append(
-                f"🩺 {p['condition']}\n"
-                f"Likelihood: {int(p['probability'] * 100)}%\n"
-                f"{p['description']}\n"
-                f"Precautions: {', '.join(p['precautions'])}"
-            )
-
         session["predictions"] = predictions
         session["stage"] = "ASK_DURATION"
 
-        return jsonify({
-            "text": "Based on your symptoms, these are the most likely conditions:",
-            "items": formatted,
-            "disclaimer": "⚠️ This is not a medical diagnosis.",
-            "next": "How many days have you had these symptoms?"
-            
-            })
+        items = [
+            f"{p['condition']} ({int(p['probability']*100)}%)\n{p['description']}"
+            for p in predictions
+        ]
 
-    # ---------------- DURATION ----------------
+        return jsonify({"items": items, "text": "How many days have you felt this way?"})
+
     if stage == "ASK_DURATION":
-    if not user_input.isdigit():
-        return jsonify({"text": "Please enter number of days (e.g. 3)."})
+        if not user_input.isdigit():
+            return jsonify({"text": "Enter number of days (e.g. 3)."})
 
-    days = int(user_input)
-    severity = determine_severity(days)
+        days = int(user_input)
+        severity = determine_severity(days)
 
-    session["duration"] = days
-    session["severity"] = severity
-    session["stage"] = "FINAL_ADVICE"
+        session["duration"] = days
+        session["severity"] = severity
+        session["stage"] = "FINAL"
 
-    advice = emotional_advice(severity, session["patient"]["name"])
+        advice = emotional_advice(severity, session["patient"]["name"])
+        links = [HEALTH_LINKS[p["condition"]] for p in session["predictions"] if p["condition"] in HEALTH_LINKS]
 
-    links = []
-    for p in session["predictions"]:
-        if p["condition"] in HEALTH_LINKS:
-            links.append(HEALTH_LINKS[p["condition"]])
+        return jsonify({
+            "text": advice,
+            "links": links,
+            "options": ["Download Prescription"]
+        })
 
-    return jsonify({
-        "text": advice,
-        "links": links,
-        "options": ["Download Prescription", "Finish"]
-    })
+    session.clear()
+    return jsonify({"text": "Session finished."})
 
-    # ---------------- PDF DOWNLOAD ----------------
+
 @app.route("/download")
 def download():
     filename = "healthchero_prescription.pdf"
@@ -397,19 +307,8 @@ def download():
     return send_file(filename, as_attachment=True)
 
 
-
-    # ---------------- FALLBACK ----------------
-    session.clear()
-    return jsonify({"text": "Session ended. Please refresh to start again."})
-
-
-
 # ---------------------------
 # Run
 # ---------------------------
 if __name__ == "__main__":
-    app.run(
-        host="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000)),
-        debug=False
-    )
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), debug=False)
