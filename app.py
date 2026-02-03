@@ -73,6 +73,11 @@ CANONICAL_SYMPTOMS = [
 ]
 
 SYMPTOM_ALIASES = {
+    "catarrh": "cough",
+    "running nose": "cough",
+    "hotness": "fever",
+    "body weakness": "fatigue",
+    "running stomach": "diarrhea"
     "hot body": "fever",
     "head pain": "headache",
     "throwing up": "vomiting",
@@ -191,11 +196,18 @@ def diagnose():
 
     # ---------------- GREETING ----------------
     if stage == "GREETING":
-        session["stage"] = "ASK_CONSENT"
-        return jsonify({
-            "text": "Hello 👋 I’m HealthChero. Shall we continue?",
-            "options": ["Yes", "No"]
-        })
+    session["stage"] = "ASK_CONSENT"
+    return jsonify({
+        "text": (
+            "Hello 👋 I’m HealthChero.\n\n"
+            "⚠️ IMPORTANT DISCLAIMER:\n"
+            "I am NOT a doctor and I do NOT provide medical diagnoses or prescriptions.\n"
+            "I only offer general health information.\n"
+            "For emergencies, visit a hospital immediately.\n\n"
+            "Do you want to continue?"
+        ),
+        "options": ["Yes", "No"]
+    })
 
     # ---------------- CONSENT ----------------
     if stage == "ASK_CONSENT":
@@ -232,20 +244,70 @@ def diagnose():
 
     # ---------------- SYMPTOMS ----------------
     if stage == "ASK_SYMPTOMS":
-        matched, clarifications = extract_symptoms_from_text(user_input)
+    matched, clarifications = extract_symptoms_from_text(user_input)
 
-        if not matched:
-            return jsonify({
-                "text": "I couldn’t understand your symptoms. Please rephrase."
-            })
-
-        session["symptoms"] = matched
-        session["stage"] = "ASK_SYMPTOM_EXPLANATION"
-
+    # 1️⃣ No symptoms detected
+    if not matched:
         return jsonify({
-            "text": "Do you want explanations of your symptoms?",
-            "options": ["Yes", "No"]
+            "text": (
+                "I couldn’t clearly identify your symptoms.\n\n"
+                "Please describe how you feel using simple terms, for example:\n"
+                "• fever and headache\n"
+                "• stomach pain and diarrhea\n"
+                "• cough and chest pain"
+            )
         })
+
+    # 2️⃣ Emergency symptom detection (hard stop)
+    EMERGENCY_SYMPTOMS = {
+        "chest pain",
+        "shortness of breath",
+        "difficulty breathing",
+        "loss of consciousness"
+    }
+
+    if any(symptom in EMERGENCY_SYMPTOMS for symptom in matched):
+        session.clear()
+        return jsonify({
+            "text": (
+                "🚨 EMERGENCY ALERT 🚨\n\n"
+                "Your symptoms may be serious and need urgent medical attention.\n\n"
+                "Please go to the nearest hospital or call emergency services immediately.\n"
+                "Do not rely on this chatbot for emergencies."
+            )
+        })
+
+    # 3️⃣ Ask for clarification if fuzzy matches occurred
+    if clarifications:
+        session["pending_symptoms"] = matched
+        session["stage"] = "CLARIFY_SYMPTOMS"
+        return jsonify({
+            "text": "Before we continue, I want to confirm something:",
+            "items": clarifications,
+            "options": ["Yes, that’s correct", "No, let me rephrase"]
+        })
+
+    # 4️⃣ Require at least 2 symptoms for safer prediction
+    if len(matched) < 2:
+        return jsonify({
+            "text": (
+                "I need at least two symptoms to give meaningful health guidance.\n\n"
+                "Please mention any other symptom you are experiencing."
+            )
+        })
+
+    # 5️⃣ Store symptoms and continue
+    session["symptoms"] = matched
+    session["stage"] = "ASK_SYMPTOM_EXPLANATION"
+
+    return jsonify({
+        "text": (
+            "Thanks. I identified the following symptoms:\n\n"
+            f"• " + "\n• ".join(s.title() for s in matched) + "\n\n"
+            "Would you like an explanation of what these symptoms may mean?"
+        ),
+        "options": ["Yes", "No"]
+    })
 
     # ---------------- SYMPTOM EXPLANATION ----------------
     if stage == "ASK_SYMPTOM_EXPLANATION":
