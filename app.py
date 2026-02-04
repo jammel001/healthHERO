@@ -243,7 +243,7 @@ def diagnose():
 
     # ---------------- SYMPTOMS ----------------
     if stage == "ASK_SYMPTOMS":
-    matched, clarifications = extract_symptoms_from_text(user_input)
+        matched, clarifications = extract_symptoms_from_text(user_input)
 
     # 1️⃣ No symptoms detected
     if not matched:
