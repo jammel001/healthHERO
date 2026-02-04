@@ -77,8 +77,8 @@ SYMPTOM_ALIASES = {
     "running nose": "cough",
     "hotness": "fever",
     "body weakness": "fatigue",
-    "running stomach": "diarrhea"
-    "head pain": "headache"
+    "running stomach": "diarrhea",
+    "head pain": "headache",
     "throwing up": "vomiting",
     "feeling nauseous": "nausea",
     "weak body": "fatigue",
