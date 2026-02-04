@@ -110,7 +110,7 @@ def extract_symptoms_from_text(text: str):
         if re.search(rf"\b{re.escape(symptom)}\b", text):
             extracted.add(symptom)
 
-    words = re.findall(r"[a-z]+", text)
+    words = [w for w in re.findall(r"[a-z]+", text) if len(w) > 3]
     for word in words:
         match = process.extractOne(word, CANONICAL_SYMPTOMS, score_cutoff=85)
         if match and match[0] not in extracted:
@@ -225,10 +225,12 @@ def diagnose():
 
     # ---------------- AGE ----------------
     if stage == "ASK_AGE":
-        if not user_input.isdigit():
+        age_match = re.search(r"\d+", user_input)
+        if not age_match:
             return jsonify({"text": "Please enter a valid age."})
 
-        session["patient"]["age"] = int(user_input)
+            session["patient"]["age"] = int(age_match.group())
+
         session["stage"] = "ASK_GENDER"
         return jsonify({
             "text": "Gender?",
@@ -245,68 +247,53 @@ def diagnose():
     if stage == "ASK_SYMPTOMS":
         matched, clarifications = extract_symptoms_from_text(user_input)
 
-    # 1️⃣ No symptoms detected
+    if clarifications:
+        session["pending_clarification"] = clarifications[0]
+        session["temp_symptoms"] = matched
+        session["stage"] = "ASK_CLARIFICATION"
+
+        return jsonify({
+            "text": f"Before we continue:\n{clarifications[0]}",
+            "options": [
+                "Yes, that’s correct",
+                "No, let me rephrase"
+            ]
+        })
+
     if not matched:
         return jsonify({
-            "text": (
-                "I couldn’t clearly identify your symptoms.\n\n"
-                "Please describe how you feel using simple terms, for example:\n"
-                "• fever and headache\n"
-                "• stomach pain and diarrhea\n"
-                "• cough and chest pain"
-            )
+            "text": "I couldn’t understand your symptoms. Please rephrase."
         })
 
-    # 2️⃣ Emergency symptom detection (hard stop)
-    EMERGENCY_SYMPTOMS = {
-        "chest pain",
-        "shortness of breath",
-        "difficulty breathing",
-        "loss of consciousness"
-    }
-
-    if any(symptom in EMERGENCY_SYMPTOMS for symptom in matched):
-        session.clear()
-        return jsonify({
-            "text": (
-                "🚨 EMERGENCY ALERT 🚨\n\n"
-                "Your symptoms may be serious and need urgent medical attention.\n\n"
-                "Please go to the nearest hospital or call emergency services immediately.\n"
-                "Do not rely on this chatbot for emergencies."
-            )
-        })
-
-    # 3️⃣ Ask for clarification if fuzzy matches occurred
-    if clarifications:
-        session["pending_symptoms"] = matched
-        session["stage"] = "CLARIFY_SYMPTOMS"
-        return jsonify({
-            "text": "Before we continue, I want to confirm something:",
-            "items": clarifications,
-            "options": ["Yes, that’s correct", "No, let me rephrase"]
-        })
-
-    # 4️⃣ Require at least 2 symptoms for safer prediction
-    if len(matched) < 2:
-        return jsonify({
-            "text": (
-                "I need at least two symptoms to give meaningful health guidance.\n\n"
-                "Please mention any other symptom you are experiencing."
-            )
-        })
-
-    # 5️⃣ Store symptoms and continue
     session["symptoms"] = matched
     session["stage"] = "ASK_SYMPTOM_EXPLANATION"
 
     return jsonify({
-        "text": (
-            "Thanks. I identified the following symptoms:\n\n"
-            f"• " + "\n• ".join(s.title() for s in matched) + "\n\n"
-            "Would you like an explanation of what these symptoms may mean?"
-        ),
+        "text": "Do you want explanations of your symptoms?",
         "options": ["Yes", "No"]
     })
+
+    # ---------------- CLARIFICATION ----------------
+    if stage == "ASK_CLARIFICATION":
+        if user_input.startswith("y"):
+
+            session["symptoms"] = session.get("temp_symptoms", [])
+            session.pop("temp_symptoms", None)
+            session.pop("pending_clarification", None)
+
+            session["stage"] = "ASK_SYMPTOM_EXPLANATION"
+
+            return jsonify({
+                "text": "Great 👍 Do you want explanations of your symptoms?",
+                "options": ["Yes", "No"]
+        })
+
+    else:
+        session["stage"] = "ASK_SYMPTOMS"
+
+        return jsonify({
+            "text": "Please describe your symptoms again clearly."
+        })
 
     # ---------------- SYMPTOM EXPLANATION ----------------
     if stage == "ASK_SYMPTOM_EXPLANATION":
