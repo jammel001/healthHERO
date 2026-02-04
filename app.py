@@ -195,9 +195,9 @@ def diagnose():
 
     # ---------------- GREETING ----------------
     if stage == "GREETING":
-    session["stage"] = "ASK_CONSENT"
-    return jsonify({
-        "text": (
+        session["stage"] = "ASK_CONSENT"
+        return jsonify({
+            "text": (
             "Hello 👋 I’m HealthChero.\n\n"
             "⚠️ IMPORTANT DISCLAIMER:\n"
             "I am NOT a doctor and I do NOT provide medical diagnoses or prescriptions.\n"
