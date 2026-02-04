@@ -78,8 +78,7 @@ SYMPTOM_ALIASES = {
     "hotness": "fever",
     "body weakness": "fatigue",
     "running stomach": "diarrhea"
-    "hot body": "fever",
-    "head pain": "headache",
+    "head pain": "headache"
     "throwing up": "vomiting",
     "feeling nauseous": "nausea",
     "weak body": "fatigue",
