@@ -185,8 +185,7 @@ def diagnose():
         or data.get("symptoms")
         or ""
     ).strip().lower()
-    clarifications = []
-    matched = []
+    
     if "stage" not in session:
         session.clear()
         session["stage"] = "GREETING"
@@ -247,7 +246,7 @@ def diagnose():
     # ---------------- SYMPTOMS ----------------
     if stage == "ASK_SYMPTOMS":
         matched, clarifications = extract_symptoms_from_text(user_input)
-
+        session["clarifications"] = clarifications
     if clarifications:
         session["pending_clarification"] = clarifications[0]
         session["temp_symptoms"] = matched
