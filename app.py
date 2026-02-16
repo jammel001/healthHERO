@@ -185,7 +185,8 @@ def diagnose():
         or data.get("symptoms")
         or ""
     ).strip().lower()
-
+    clarifications = []
+    matched = []
     if "stage" not in session:
         session.clear()
         session["stage"] = "GREETING"
