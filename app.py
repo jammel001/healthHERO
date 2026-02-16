@@ -275,24 +275,35 @@ def diagnose():
 
     # ---------------- CLARIFICATION ----------------
     if stage == "ASK_CLARIFICATION":
-        if user_input.startswith("y"):
+        user_input_clean = user_input.strip().lower()
 
-            session["symptoms"] = session.get("temp_symptoms", [])
-            session.pop("temp_symptoms", None)
-            session.pop("pending_clarification", None)
+        if user_input_clean.startswith("y"):
+            pending = session.get("pending_symptoms")
 
+            if not pending:
+                session["stage"] = "ASK_SYMPTOMS"
+                return jsonify({
+                    "text": "Something went wrong. Please describe your symptoms again."
+                })
+
+            session["symptoms"] = pending
+            session.pop("pending_symptoms", None)
             session["stage"] = "ASK_SYMPTOM_EXPLANATION"
 
             return jsonify({
-                "text": "Great 👍 Do you want explanations of your symptoms?",
+                "text": (
+                    "Thank you for confirming.\n\n"
+                    "Would you like explanations of your symptoms?"
+                ),
                 "options": ["Yes", "No"]
-        })
+            })
 
-    else:
+    # If user selects No
+        session.pop("pending_symptoms", None)
         session["stage"] = "ASK_SYMPTOMS"
 
         return jsonify({
-            "text": "Please describe your symptoms again clearly."
+            "text": "No problem. Please rephrase your symptoms clearly."
         })
 
     # ---------------- SYMPTOM EXPLANATION ----------------
