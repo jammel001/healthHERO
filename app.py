@@ -229,7 +229,7 @@ def diagnose():
         if not age_match:
             return jsonify({"text": "Please enter a valid age."})
 
-            session["patient"]["age"] = int(age_match.group())
+        session["patient"]["age"] = int(age_match.group())
 
         session["stage"] = "ASK_GENDER"
         return jsonify({
@@ -249,7 +249,7 @@ def diagnose():
         session["clarifications"] = clarifications
     if clarifications:
         session["pending_clarification"] = clarifications[0]
-        session["temp_symptoms"] = matched
+        session["pending_symptoms"] = matched
         session["stage"] = "ASK_CLARIFICATION"
 
         return jsonify({
@@ -274,38 +274,28 @@ def diagnose():
     })
 
     # ---------------- CLARIFICATION ----------------
+    # ✅ CORRECT - Replace entire ASK_CLARIFICATION block
     if stage == "ASK_CLARIFICATION":
-        user_input_clean = user_input.strip().lower()
-
         if user_input_clean.startswith("y"):
-            pending = session.get("pending_symptoms")
-
-            if not pending:
-                session["stage"] = "ASK_SYMPTOMS"
-                return jsonify({
-                    "text": "Something went wrong. Please describe your symptoms again."
-                })
-
-            session["symptoms"] = pending
-            session.pop("pending_symptoms", None)
+            # Confirm symptoms and move forward
+            session["symptoms"] = session.get("temp_symptoms", [])
+            session.pop("temp_symptoms", None)
+            session.pop("pending_clarification", None)
             session["stage"] = "ASK_SYMPTOM_EXPLANATION"
-
+        
             return jsonify({
-                "text": (
-                    "Thank you for confirming.\n\n"
-                    "Would you like explanations of your symptoms?"
-                ),
+                "text": "Thank you for confirming. Would you like explanations of your symptoms?",
                 "options": ["Yes", "No"]
             })
-
-    # If user selects No
-        session.pop("pending_symptoms", None)
-        session["stage"] = "ASK_SYMPTOMS"
-
-        return jsonify({
-            "text": "No problem. Please rephrase your symptoms clearly."
-        })
-
+        else:
+            # User wants to rephrase
+            session.pop("temp_symptoms", None)
+            session.pop("pending_clarification", None)
+            session["stage"] = "ASK_SYMPTOMS"
+        
+            return jsonify({
+                "text": "No problem. Please describe your symptoms clearly."
+            })
     # ---------------- SYMPTOM EXPLANATION ----------------
     if stage == "ASK_SYMPTOM_EXPLANATION":
         if user_input.startswith("y"):
