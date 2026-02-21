@@ -360,41 +360,60 @@ class ModelBundle:
                     matched.append(fuzzy[0])
         return list(set(matched))
     
-    def predict(self, symptoms: List[str]) -> List[Dict]:
+    def predict(self, symptoms):
         """
         Predict conditions based on symptoms.
         Returns top 3 predictions with probabilities.
         """
+        logger.info(f"DEBUG: Predict called with symptoms: {symptoms}")
+    
         if not symptoms:
+           logger.warning("DEBUG: No symptoms provided")
             return []
-        
+    
         try:
             # Transform symptoms to feature vector
             symptom_text = " ".join(symptoms)
+            logger.info(f"DEBUG: Symptom text: '{symptom_text}'")
+        
             X = self.encoder.transform([symptom_text])
-            
+            logger.info(f"DEBUG: Transformed shape: {X.shape}")
+        
             # Get prediction probabilities
             probs = self.model.predict_proba(X)[0]
+            logger.info(f"DEBUG: Probabilities: {probs}")
+            logger.info(f"DEBUG: Max prob: {max(probs)}")
+        
             top_indices = np.argsort(probs)[::-1][:3]
-            
+            logger.info(f"DEBUG: Top indices: {top_indices}")
+        
             results = []
             for idx in top_indices:
-                if probs[idx] < 0.05:  # Filter very low confidence
+                prob = probs[idx]
+                logger.info(f"DEBUG: Checking index {idx}, prob {prob}")
+            
+                if prob < 0.05:  # Filter very low confidence
+                    logger.info(f"DEBUG: Skipping {idx} (too low)")
                     continue
-                    
+                
                 label = self.label_encoder.inverse_transform([idx])[0]
+                logger.info(f"DEBUG: Label: {label}")
+            
                 results.append({
                     "condition": label,
-                    "probability": round(float(probs[idx]), 3),
-                    "confidence_tier": "high" if probs[idx] > 0.7 else "medium" if probs[idx] > 0.4 else "low",
+                    "probability": round(float(prob), 3),
+                    "confidence_tier": "high" if prob > 0.7 else "medium" if prob > 0.4 else "low",
                     "description": disease_descriptions.get(label, "No description available"),
-                    "precautions": disease_precautions.get(label, [])[:5]  # Limit to 5
+                    "precautions": disease_precautions.get(label, [])[:5]
                 })
-            
+        
+            logger.info(f"DEBUG: Returning {len(results)} results")
             return results
-            
+        
         except Exception as e:
-            logger.error(f"Prediction error: {e}")
+            logger.error(f"DEBUG: Prediction error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return []
 
 # Initialize model bundle
