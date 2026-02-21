@@ -368,7 +368,7 @@ class ModelBundle:
         logger.info(f"DEBUG: Predict called with symptoms: {symptoms}")
     
         if not symptoms:
-           logger.warning("DEBUG: No symptoms provided")
+            logger.warning("DEBUG: No symptoms provided")
             return []
     
         try:
