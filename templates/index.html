@@ -1,305 +1,171 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>B. Magaji — HealthChero</title>
-
-<link rel="stylesheet" href="/static/style.css">
-
-<style>
-
-/* Confidence bar */
-.conf-bar{
-  background:#eee;
-  height:8px;
-  border-radius:4px;
-  margin-top:4px;
-}
-
-.conf-fill{
-  height:8px;
-  background:#4CAF50;
-  border-radius:4px;
-}
-
-.prediction{
-  margin-top:8px;
-  padding:6px;
-  border-left:3px solid #4CAF50;
-}
-
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>B. Magaji — HealthChero</title>
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 
 <body>
-
 <div class="page">
 
-<!-- HEADER -->
-<header class="topbar">
+  <!-- Header -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">BM</div>
+      <div class="brand-text">
+        <h1>B. Magaji — HealthChero</h1>
+        <p class="muted">Built by Bara'u Magaji &amp; team</p>
+      </div>
+    </div>
 
-<div class="brand">
-<div class="logo">BM</div>
+    <nav class="top-actions">
+      <a class="link" href="/guidelines" target="_blank">Guidelines</a>
+      <button id="restartBtn" class="btn small">Start Over</button>
+    </nav>
+  </header>
 
-<div class="brand-text">
-<h1>B. Magaji — HealthChero</h1>
-<p class="muted">Built by Bara'u Magaji & team</p>
-</div>
-</div>
+  <!-- Main -->
+  <main class="container">
+    <section class="left">
 
-<nav class="top-actions">
-<a class="link" href="/guidelines" target="_blank">Guidelines</a>
-<button id="restartBtn" class="btn small">Start Over</button>
-</nav>
+      <div class="card chatcard">
+        <div id="chatWindow" class="chat-window"></div>
 
-</header>
+        <div class="controls">
+          <input id="chatInput"
+                 placeholder="Type your message here and press Enter…">
+          <button id="sendBtn" class="btn">Send</button>
+        </div>
 
-<!-- MAIN -->
-<main class="container">
+        <div class="hint">
+          This assistant provides medical guidance, not diagnosis.
+        </div>
+      </div>
 
-<section class="left">
+      <div class="card actions">
+        <button id="simplePdf" class="btn">Download PDF</button>
+      </div>
 
-<div class="card chatcard">
+    </section>
+  </main>
 
-<div id="chatWindow" class="chat-window"></div>
-
-<div class="controls">
-<input id="chatInput"
-placeholder="Type your message here and press Enter…">
-<button id="sendBtn" class="btn">Send</button>
-</div>
-
-<div class="hint">
-This assistant provides medical guidance, not diagnosis.
-</div>
-
-</div>
-
-<div class="card actions">
-<button id="simplePdf" class="btn">Download PDF</button>
-</div>
-
-</section>
-
-</main>
-
-<footer class="footer">
-
-<div>
-Contact:
-<a href="mailto:admin@healthchero.com">admin@healthchero.com</a>
-</div>
-
-</footer>
+  <footer class="footer">
+    <div>
+      Contact:
+      <a href="mailto:admin@healthchero.com">admin@healthchero.com</a>
+    </div>
+  </footer>
 
 </div>
 
 <script>
+/* ======================
+   ELEMENTS
+====================== */
+const chatWindow = document.getElementById('chatWindow');
+const chatInput  = document.getElementById('chatInput');
+const sendBtn    = document.getElementById('sendBtn');
+const restartBtn = document.getElementById('restartBtn');
 
 /* ======================
-ELEMENTS
+   STATE
 ====================== */
-
-const chatWindow = document.getElementById("chatWindow")
-const chatInput = document.getElementById("chatInput")
-const sendBtn = document.getElementById("sendBtn")
-const restartBtn = document.getElementById("restartBtn")
-const pdfBtn = document.getElementById("simplePdf")
+let conversationStarted = false;
 
 /* ======================
-STATE
+   UI HELPERS
 ====================== */
-
-let conversationStarted = false
-
-/* ======================
-UI HELPERS
-====================== */
-
-function appendMessage(role,text){
-
-const div=document.createElement("div")
-
-div.className="msg "+role
-
-div.textContent=text
-
-chatWindow.appendChild(div)
-
-chatWindow.scrollTop=chatWindow.scrollHeight
-
+function appendMessage(role, text) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.textContent = text;
+  chatWindow.appendChild(div);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
+function renderOptions(options) {
+  const box = document.createElement('div');
+  box.className = 'options';
 
-/* show predictions */
+  options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className = 'btn small';
+    btn.textContent = opt;
+    btn.onclick = () => sendMessage(opt.toLowerCase());
+    box.appendChild(btn);
+  });
 
-function renderPredictions(preds){
-
-preds.forEach(p=>{
-
-const block=document.createElement("div")
-
-block.className="prediction"
-
-block.innerHTML=
-
-"<b>"+p.condition+"</b> ("+p.confidence+"%)"+
-"<div class='conf-bar'><div class='conf-fill' style='width:"+p.confidence+"%'></div></div>"+
-"<div>"+p.description+"</div>"
-
-chatWindow.appendChild(block)
-
-})
-
-chatWindow.scrollTop=chatWindow.scrollHeight
-
-}
-
-
-/* hospitals */
-
-function renderHospitals(list){
-
-if(!list || list.length===0) return
-
-appendMessage("ai","Nearest hospitals you can visit:")
-
-list.forEach(h=>{
-
-appendMessage("ai","• "+h)
-
-})
-
-}
-
-
-/* ======================
-CORE CHAT LOGIC
-====================== */
-
-async function sendMessage(text){
-
-if(!text) return
-
-appendMessage("user",text)
-
-chatInput.value=""
-
-const payload = conversationStarted
-? {reply:text}
-: {symptoms:text}
-
-conversationStarted=true
-
-try{
-
-const res = await fetch("/api/diagnose",{
-
-method:"POST",
-
-headers:{"Content-Type":"application/json"},
-
-body:JSON.stringify(payload)
-
-})
-
-const data = await res.json()
-
-if(data.text) appendMessage("ai",data.text)
-
-if(data.items){
-
-data.items.forEach(i=>appendMessage("ai",i))
-
-}
-
-if(data.predictions){
-
-appendMessage("ai","Based on your symptoms, possible conditions include:")
-
-renderPredictions(data.predictions)
-
-}
-
-if(data.severity){
-
-appendMessage("ai","Severity level: "+data.severity)
-
-}
-
-if(data.hospitals){
-
-renderHospitals(data.hospitals)
-
-}
-
-if(data.advice){
-
-appendMessage("ai",data.advice)
-
-}
-
-if(data.report_url){
-
-pdfBtn.onclick=()=>{
-
-window.open(data.report_url,"_blank")
-
-}
-
-}
-
-}catch(e){
-
-appendMessage("ai","⚠️ Unable to reach server. Please try again.")
-
-}
-
+  chatWindow.appendChild(box);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
 /* ======================
-EVENTS
+   CORE LOGIC
 ====================== */
+async function sendMessage(text) {
+  if (!text) return;
 
-sendBtn.onclick = ()=>sendMessage(chatInput.value.trim())
+  appendMessage('user', text);
+  chatInput.value = '';
 
-chatInput.addEventListener("keydown",e=>{
+  const payload = conversationStarted
+    ? { reply: text }
+    : { symptoms: text };
 
-if(e.key==="Enter") sendBtn.click()
+  conversationStarted = true;
 
-})
+  try {
+    const res = await fetch('/api/diagnose', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
 
-restartBtn.onclick=()=>{
+    const data = await res.json();
 
-chatWindow.innerHTML=""
+    if (data.text) appendMessage('ai', data.text);
+    if (data.items) data.items.forEach(i => appendMessage('ai', i));
+    if (data.advice) appendMessage('ai', data.advice);
+    if (data.disclaimer) appendMessage('ai', data.disclaimer);
+    if (data.options) renderOptions(data.options);
 
-conversationStarted=false
-
-greetUser()
-
+  } catch (e) {
+    appendMessage('ai', '⚠️ Unable to reach server. Please try again.');
+  }
 }
 
 /* ======================
-GREETING
+   EVENTS
 ====================== */
+sendBtn.onclick = () => sendMessage(chatInput.value.trim());
 
-function greetUser(){
+chatInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendBtn.click();
+});
 
-appendMessage(
+restartBtn.onclick = () => {
+  chatWindow.innerHTML = '';
+  conversationStarted = false;
+  greetUser();
+};
 
-"ai",
-
-"Welcome to HealthChero AI Healthcare Assistant. " +
-"Please tell me your name so we can begin your health assessment."
-
-)
-
+/* ======================
+   INITIAL GREETING
+====================== */
+function greetUser() {
+  appendMessage(
+    'ai',
+    'Welcome to Healthchero chatbot, a healthcare conversational assistant. ' +
+    'You can start interacting by saying Assalamu,alaikum or HELLO'
+  );
 }
 
-greetUser()
-
+greetUser();
 </script>
 
 </body>
 </html>
+
+
