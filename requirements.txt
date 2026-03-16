@@ -13,4 +13,4 @@ python-dotenv==1.0.0
 scikit-learn==1.6.1
 flask-limiter==3.5.0
 cryptography==41.0.7
-
+sentence-transformers
