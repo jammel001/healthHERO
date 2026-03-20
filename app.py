@@ -37,7 +37,7 @@ encoder = joblib.load(os.path.join(BASE_DIR, "symptom_encoder.pkl"))
 label_encoder = joblib.load(os.path.join(BASE_DIR, "label_encoder.pkl"))
 
 disease_desc = joblib.load(os.path.join(BASE_DIR, "disease_to_description.pkl"))
-disease_prec = joblib.load(os.path.join(BASE_DIR, "disease_to_precaution.pkl"))
+disease_prec = joblib.load(os.path.join(BASE_DIR, "disease_to_precautions.pkl"))
 
 # =========================
 # SYMPTOMS
