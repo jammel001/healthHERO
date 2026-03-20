@@ -136,7 +136,9 @@ def diagnose():
     # ================= GREETING =================
     if stage == "start":
         session["stage"] = "ask_name"
-        return jsonify({"text": "Hello 👋 I am HealthHero.\nWhat is your name?"})
+        return jsonify({
+            "text": "Hello 👋 I am HealthHero.\nWhat is your name?"
+        })
 
     # ================= NAME =================
     if stage == "ask_name":
@@ -146,10 +148,23 @@ def diagnose():
 
     # ================= AGE =================
     if stage == "ask_age":
-        age = int(re.findall(r"\d+", user_input)[0])
+        match = re.findall(r"\d+", user_input)
+
+        if not match:
+            return jsonify({"text": "Please enter a valid age (e.g., 25)"})
+
+        age = int(match[0])
+
+        if age < 1 or age > 120:
+            return jsonify({"text": "Enter a realistic age (1–120)"})
+
         session["age"] = age
         session["stage"] = "ask_gender"
-        return jsonify({"text": "Gender?", "options": ["Male", "Female"]})
+
+        return jsonify({
+            "text": "Gender?",
+            "options": ["Male", "Female"]
+        })
 
     # ================= GENDER =================
     if stage == "ask_gender":
@@ -176,7 +191,12 @@ def diagnose():
 
     # ================= DURATION =================
     if stage == "ask_duration":
-        days = int(re.findall(r"\d+", user_input)[0])
+        match = re.findall(r"\d+", user_input)
+
+        if not match:
+            return jsonify({"text": "Please enter number of days (e.g., 3 days)"})
+
+        days = int(match[0])
 
         severity, advice = calculate_severity(days)
 
@@ -260,7 +280,12 @@ def download_pdf():
 
     return send_file(buffer, as_attachment=True, download_name="report.pdf", mimetype="application/pdf")
 
-
+@app.errorhandler(Exception)
+def handle_exception(e):
+    print("ERROR:", str(e))
+    return jsonify({
+        "text": "⚠️ Something went wrong. Please try again."
+    }), 500
 # =========================
 # RUN
 # =========================
