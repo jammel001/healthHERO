@@ -137,7 +137,7 @@ def diagnose():
     if stage == "start":
         session["stage"] = "ask_name"
         return jsonify({
-            "text": "Hello 👋 I am HealthHero.\nWhat is your name?"
+            "text": "Hello I am HealthHero.\nWhat is your name?"
         })
 
     # ================= NAME =================
@@ -234,7 +234,7 @@ def diagnose():
             "severity": result["severity"],
             "predictions": preds,
             "hospital_link": result["hospital_link"],
-            "disclaimer": "⚠️ Not a medical diagnosis."
+            "disclaimer": "This is Not a medical diagnosis."
         })
 
 
@@ -273,7 +273,7 @@ def download_pdf():
         ))
 
     elements.append(Spacer(1, 10))
-    elements.append(Paragraph("⚠️ This is NOT a medical diagnosis.", styles['Normal']))
+    elements.append(Paragraph("This is NOT a medical diagnosis.", styles['Normal']))
 
     doc.build(elements)
     buffer.seek(0)
